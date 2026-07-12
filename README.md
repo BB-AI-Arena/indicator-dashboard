@@ -1,5 +1,13 @@
 # Indicator Dashboard
 
+[![Active development](https://img.shields.io/badge/status-active%20development-orange?style=flat-square)](https://github.com/BB-AI-Arena/indicator-dashboard)
+[![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/frontend-React-61DAFB?style=flat-square&logo=react&logoColor=20232A)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/build-Vite-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
+[![SQLite](https://img.shields.io/badge/storage-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![Docker Compose](https://img.shields.io/badge/runtime-Docker%20Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Last commit](https://img.shields.io/github/last-commit/BB-AI-Arena/indicator-dashboard?style=flat-square)](https://github.com/BB-AI-Arena/indicator-dashboard/commits/main)
+
 A local, read-only options decision dashboard for cached market-data analysis, deterministic setup ranking, contract-quality review, and session-aware trade planning.
 
 This project is built for decision support. It does not place trades, route orders, manage positions, or provide financial advice.
