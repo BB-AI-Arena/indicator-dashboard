@@ -78,6 +78,9 @@ function SetupCard({ title, candidate, emptyText, onSelectSymbol }) {
   const targets = candidate.targets || []
   const options = candidate.options_positioning || {}
   const social = candidate.social_narrative || {}
+  const visible = candidate.visible_conditions || {}
+  const supporting = (candidate.supporting_factors || []).slice(0, 3)
+  const conflicts = (candidate.conflicting_factors || []).slice(0, 2)
   return (
     <section className={`decision-card ${toneForDirection(candidate.direction)}`}>
       <div className="decision-card-header">
@@ -92,40 +95,23 @@ function SetupCard({ title, candidate, emptyText, onSelectSymbol }) {
         </span>
       </div>
 
-      <p className="mt-3 text-lg font-semibold text-slate-50">
-        {candidate.direction} | {candidate.setup_name || 'Setup unavailable'}
-      </p>
-      <p className="mt-1 text-sm text-slate-300">
-        {candidate.next_session_bias || 'INSUFFICIENT DATA'} | Price {money(candidate.current_or_previous_session_price)}
-      </p>
-      <p className="mt-1 text-xs text-slate-400">
-        Profile: {candidate.profile_state || candidate.profile_status || 'NOT_STARTED'}{candidate.profile_summary?.completeness_percentage == null ? ' • completeness pending' : ` • ${Number(candidate.profile_summary.completeness_percentage).toFixed(0)}% complete`}
-      </p>
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-lg font-semibold text-slate-50">{candidate.direction} | {candidate.setup_name || 'Setup unavailable'}</p>
+        <span className="text-xs uppercase text-slate-400">{candidate.next_session_bias || 'INSUFFICIENT DATA'} • {money(candidate.current_or_previous_session_price)}</span>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-200">{candidate.thesis || 'The setup is waiting for price, VWAP, and volume confirmation.'}</p>
 
-      <div className="decision-metrics">
-        <div>
-          <span>Historical match</span>
-          <strong>{confidenceText(match)}</strong>
-        </div>
-        <div>
-          <span>Expected value</span>
-          <strong>{pctRaw(candidate.expected_value_estimate)}</strong>
-        </div>
-        <div>
-          <span>Conviction</span>
-          <strong>{candidate.conviction || 'INSUFFICIENT'}</strong>
-        </div>
-        <div>
-          <span>Score status</span>
-          <strong>{candidate.score_status || 'UNAVAILABLE'}{candidate.score == null ? '' : ` • ${candidate.score}`}</strong>
-        </div>
+      <div className="decision-primary-grid">
+        <div><span>Price structure</span><strong>{visible.price_structure || '-'}</strong></div>
+        <div><span>VWAP</span><strong>{visible.vwap || '-'}</strong></div>
+        <div><span>Volume</span><strong>{visible.volume || '-'}</strong></div>
+        <div><span>Key level</span><strong>{visible.key_level || '-'}</strong></div>
       </div>
 
-      <div className="decision-levels">
-        <p><span>Entry</span>{candidate.entry_trigger?.condition || '-'}</p>
+      <div className="decision-levels decision-levels-primary">
+        <p><span>Entry trigger</span>{candidate.entry_trigger?.condition || '-'}</p>
         <p><span>Invalidation</span>{candidate.invalidation?.condition || '-'}</p>
-        <p><span>Target 1</span>{targetLine(targets[0], 1)}</p>
-        <p><span>Target 2</span>{targetLine(targets[1], 2)}</p>
+        <p><span>Targets</span>{targetLine(targets[0], 1)}{targets[1] ? ` • ${targetLine(targets[1], 2)}` : ''}</p>
       </div>
 
       <div className="decision-contract">
@@ -134,29 +120,35 @@ function SetupCard({ title, candidate, emptyText, onSelectSymbol }) {
         <small>Max entry: {candidate.maximum_acceptable_option_entry ? money(candidate.maximum_acceptable_option_entry) : 'requires live spread validation'}</small>
       </div>
 
-      <div className="decision-evidence-grid">
+      <div className="decision-compact-meta">
+        <span>Historical: {confidenceText(match)}</span>
+        <span>Expected value: {pctRaw(candidate.expected_value_estimate)}</span>
+        <span>Data: 15m {formatCentralTime(candidate.data_freshness?.latest_15m_candle)}</span>
+      </div>
+
+      <div className="decision-evidence-grid decision-evidence-compact">
         <div>
           <p className="decision-subhead">Why it ranks</p>
-          {(candidate.supporting_factors || []).slice(0, 4).map((item) => <p key={item}>+ {item}</p>)}
-          {!candidate.supporting_factors?.length && <p>No strong support yet.</p>}
+          {supporting.length ? supporting.map((item) => <p key={item}>+ {item}</p>) : <p>No confirmed primary support yet.</p>}
         </div>
         <div>
-          <p className="decision-subhead">Primary risk</p>
-          <p>{candidate.primary_risk || '-'}</p>
-          {(candidate.conflicting_factors || []).slice(0, 2).map((item) => <p key={item}>- {item}</p>)}
+          <p className="decision-subhead">Primary conflict</p>
+          {conflicts.length ? conflicts.map((item) => <p key={item}>- {item}</p>) : <p>{candidate.primary_risk || 'No primary conflict recorded.'}</p>}
         </div>
       </div>
 
-      <div className="decision-positioning">
-        <p>
-          Options positioning: {options.positioning_bias || options.classification || 'unavailable'}
-          {options.put_call_volume_ratio !== undefined && options.put_call_volume_ratio !== null ? ` | P/C vol ${Number(options.put_call_volume_ratio).toFixed(2)}` : ''}
-          {options.call_put_volume_ratio !== undefined && options.call_put_volume_ratio !== null ? ` | C/P vol ${Number(options.call_put_volume_ratio).toFixed(2)}` : ''}
-          {options.put_call_open_interest_ratio !== undefined && options.put_call_open_interest_ratio !== null ? ` | P/C OI ${Number(options.put_call_open_interest_ratio).toFixed(2)}` : ''}
-        </p>
-        <p>Data freshness: 15m {formatCentralTime(candidate.data_freshness?.latest_15m_candle)} | options {formatCentralTime(candidate.data_freshness?.latest_option_snapshot_at)}</p>
-        <p>Social narrative: {social.classification || 'INSUFFICIENT DATA'}{social.mention_velocity ? ` | mentions ${Number(social.mention_velocity).toFixed(1)}x baseline` : ''} | confirmation {social.price_confirmation || 'UNAVAILABLE'}</p>
-      </div>
+      <details className="decision-advanced">
+        <summary>Advanced analysis</summary>
+        <div className="decision-advanced-grid">
+          <div><strong>Conviction</strong><span>{candidate.conviction || 'INSUFFICIENT'} • score {candidate.score_status || 'UNAVAILABLE'}{candidate.score == null ? '' : ` (${candidate.score})`}</span></div>
+          <div><strong>Options positioning</strong><span>{options.positioning_bias || options.classification || 'Unavailable'}{options.put_call_volume_ratio != null ? ` • P/C volume ${Number(options.put_call_volume_ratio).toFixed(2)}` : ''}</span></div>
+          <div><strong>News</strong><span>{candidate.news_impact?.impact_label || 'Unavailable'}</span></div>
+          <div><strong>Social narrative</strong><span>{social.classification || 'Unavailable'}{social.mention_velocity ? ` • ${Number(social.mention_velocity).toFixed(1)}x baseline` : ''}</span></div>
+          <div><strong>Profile</strong><span>{candidate.profile_state || candidate.profile_status || 'NOT_STARTED'}{candidate.profile_summary?.completeness_percentage == null ? ' • completeness pending' : ` • ${Number(candidate.profile_summary.completeness_percentage).toFixed(0)}% complete`}</span></div>
+          <div><strong>Freshness</strong><span>Options {formatCentralTime(candidate.data_freshness?.latest_option_snapshot_at)}</span></div>
+        </div>
+        <p className="mt-3 text-xs text-slate-400">Detailed indicators, Fibonacci behavior, money flow, Greeks, catalysts, social sentiment, and contract alternatives remain available in the selected ticker’s drill-down.</p>
+      </details>
     </section>
   )
 }

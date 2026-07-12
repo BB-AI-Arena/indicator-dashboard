@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.db import Base, SessionLocal, engine  # noqa: E402
-from app.decision_dashboard import build_decision_dashboard, core_universe, ensure_core_universe  # noqa: E402
+from app.decision_dashboard import _grouped_score, build_decision_dashboard, core_universe, ensure_core_universe  # noqa: E402
 from app.models import (  # noqa: E402
     Candle,
     HistoricalSetupFeature,
@@ -97,7 +97,11 @@ class DecisionDashboardTests(unittest.TestCase):
         }
         with SessionLocal() as db:
             profile = ensure_ticker_profile(db, symbol, source="unit_test")
-            profile.profile_status = "READY"
+            profile.profile_status = "READY_FOR_PLANNING"
+            profile.profile_state = "READY_FOR_PLANNING"
+            profile.planning_ready = True
+            profile.live_ready = False
+            profile.last_completeness_check = now.isoformat()
             profile.data_coverage_json = json.dumps(coverage)
             profile.stats_json = json.dumps(stats)
             profile.latest_setup_state_json = json.dumps(latest_setup_state)
@@ -208,6 +212,25 @@ class DecisionDashboardTests(unittest.TestCase):
         self.assertTrue(payload["best_long_setup"]["passes_hard_gates"])
         self.assertIn("52", payload["best_long_setup"]["historical_match"]["display"])
         self.assertEqual(payload["best_short_setup"]["next_session_bias"], "LIKELY BEARISH CONTINUATION")
+        self.assertLessEqual(len(payload["best_long_setup"]["supporting_factors"]), 3)
+        self.assertLessEqual(len(payload["best_long_setup"]["conflicting_factors"]), 2)
+        self.assertIn("price_structure", payload["best_long_setup"]["evidence_groups"])
+
+    def test_grouped_score_caps_correlated_evidence(self) -> None:
+        groups = {
+            "price_structure": {"score": 1, "weight": 25},
+            "vwap_control": {"score": 1, "weight": 20},
+            "volume_participation": {"score": 1, "weight": 20},
+            "relative_behavior": {"score": 1, "weight": 10},
+            "historical_evidence": {"score": -1, "weight": 10},
+            "options_structure": {"score": -1, "weight": 10},
+            "catalyst_context": {"score": 0, "weight": 3},
+            "social_sentiment": {"score": 1, "weight": 2},
+        }
+        score = _grouped_score(groups)
+        self.assertIsNotNone(score)
+        self.assertGreater(score, 50)
+        self.assertLess(score, 80)
 
 
 if __name__ == "__main__":

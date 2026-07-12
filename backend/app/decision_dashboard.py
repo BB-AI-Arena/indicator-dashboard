@@ -43,6 +43,17 @@ CORE_UNIVERSE_DEFAULT = [
     "CRWD",
 ]
 
+GROUPED_SCORE_WEIGHTS = {
+    "price_structure": 25,
+    "vwap_control": 20,
+    "volume_participation": 20,
+    "relative_behavior": 10,
+    "historical_evidence": 10,
+    "options_structure": 10,
+    "catalyst_context": 3,
+    "social_sentiment": 2,
+}
+
 
 def _cfg() -> dict[str, Any]:
     return config_manager.get("decision_dashboard", default={}) or {}
@@ -328,54 +339,153 @@ def _entry_and_invalidation(side: str, features: dict[str, Any]) -> tuple[dict[s
     )
 
 
-def _evidence(side: str, features: dict[str, Any], scan: Scan | None, options: dict[str, Any], news_payload: dict[str, Any]) -> tuple[list[str], list[str]]:
-    supporting: list[str] = []
-    conflicts: list[str] = []
+def _grouped_evidence(
+    side: str,
+    features: dict[str, Any],
+    scan: Scan | None,
+    options: dict[str, Any],
+    news_payload: dict[str, Any],
+    social_payload: dict[str, Any],
+    setup_stats: dict[str, Any],
+    setup_name: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Collapse correlated indicators into capped evidence groups.
+
+    The analytics engine still calculates every indicator. This layer prevents
+    several versions of the same signal from pretending to be independent
+    confirmation in the recommendation score.
+    """
+    bullish = side == "LONG"
     close_vwap = _safe_float(features.get("close_vwap_atr") or features.get("distance_from_vwap_atr"))
-    ema_fast_slow = _safe_float(features.get("ema_fast_slow_atr"))
     relative_volume = _safe_float(features.get("relative_volume"))
     rs_qqq = _safe_float(features.get("relative_strength_qqq"))
     positioning = str(options.get("positioning_bias") or options.get("classification") or "").lower()
     news_impact = str(news_payload.get("impact_label") or news_payload.get("position_impact") or "").lower()
+    groups: dict[str, dict[str, Any]] = {}
 
-    if side == "LONG":
-        if close_vwap is not None and close_vwap > 0:
-            supporting.append("price is above VWAP")
-        elif close_vwap is not None and close_vwap < 0:
-            conflicts.append("price is below VWAP")
-        if ema_fast_slow is not None and ema_fast_slow > 0:
-            supporting.append("EMA alignment is bullish")
-        if rs_qqq is not None and rs_qqq > 0:
-            supporting.append("relative strength versus QQQ is positive")
-        if "call" in positioning:
-            supporting.append("options positioning leans call-heavy")
-        elif "put" in positioning:
-            conflicts.append("options positioning leans put-heavy")
-        if "conflict" in news_impact or "negative" in news_impact:
-            conflicts.append("recent news reaction conflicts with the long thesis")
-    else:
-        if close_vwap is not None and close_vwap < 0:
-            supporting.append("price is below VWAP")
-        elif close_vwap is not None and close_vwap > 0:
-            conflicts.append("price is above VWAP")
-        if ema_fast_slow is not None and ema_fast_slow < 0:
-            supporting.append("EMA alignment is bearish")
-        if rs_qqq is not None and rs_qqq < 0:
-            supporting.append("relative weakness versus QQQ is negative")
-        if "put" in positioning:
-            supporting.append("options positioning leans put-heavy")
-        elif "call" in positioning:
-            conflicts.append("options positioning leans call-heavy")
-        if "support" in news_impact or "positive" in news_impact:
-            conflicts.append("recent news reaction conflicts with the short thesis")
+    price_score: int | None = None
+    if features.get("price") is not None or scan:
+        scan_grade = str(scan.grade if scan else "").upper()
+        aligned_side = str(features.get("direction") or (scan.side if scan else "")).upper() == side
+        price_score = 1 if aligned_side and scan_grade in {"TRADE_CANDIDATE", "HIGH_CONVICTION"} else 0
+    groups["price_structure"] = {
+        "label": "Price structure",
+        "weight": GROUPED_SCORE_WEIGHTS["price_structure"],
+        "score": price_score,
+        "status": "SUPPORTS" if price_score == 1 else "NEUTRAL" if price_score == 0 else "UNAVAILABLE",
+        "detail": f"{setup_name or 'Directional price structure'} is aligned with {side.lower()}" if price_score == 1 else "Directional price structure is not confirmed",
+    }
 
-    if relative_volume is not None and relative_volume >= 1.2:
-        supporting.append(f"relative volume is {relative_volume:.1f}x")
-    if scan and scan.grade in {"TRADE_CANDIDATE", "HIGH_CONVICTION"}:
-        supporting.append(f"latest chart scan grade is {scan.grade}")
-    elif scan and scan.grade in {"NO_TRADE", "WATCH"}:
-        conflicts.append(f"latest chart scan grade is only {scan.grade}")
-    return supporting[:4], conflicts[:2]
+    vwap_score: int | None = None
+    if close_vwap is not None:
+        aligned = close_vwap > 0 if bullish else close_vwap < 0
+        vwap_score = 1 if aligned else -1
+    groups["vwap_control"] = {
+        "label": "VWAP control",
+        "weight": GROUPED_SCORE_WEIGHTS["vwap_control"],
+        "score": vwap_score,
+        "status": "SUPPORTS" if vwap_score == 1 else "CONFLICTS" if vwap_score == -1 else "UNAVAILABLE",
+        "detail": ("price is above VWAP" if close_vwap is not None and close_vwap > 0 else "price is below VWAP" if close_vwap is not None and close_vwap < 0 else "VWAP relationship is unavailable"),
+    }
+
+    volume_score: int | None = None
+    if relative_volume is not None:
+        volume_score = 1 if relative_volume >= 1.2 else -1 if relative_volume < 0.8 else 0
+    groups["volume_participation"] = {
+        "label": "Volume participation",
+        "weight": GROUPED_SCORE_WEIGHTS["volume_participation"],
+        "score": volume_score,
+        "status": "SUPPORTS" if volume_score == 1 else "CONFLICTS" if volume_score == -1 else "NEUTRAL" if volume_score == 0 else "UNAVAILABLE",
+        "detail": f"relative volume is {relative_volume:.1f}x" if relative_volume is not None else "relative volume is unavailable",
+    }
+
+    relative_score: int | None = None
+    if rs_qqq is not None:
+        relative_score = 1 if (rs_qqq > 0 if bullish else rs_qqq < 0) else -1
+    groups["relative_behavior"] = {
+        "label": "Relative behavior",
+        "weight": GROUPED_SCORE_WEIGHTS["relative_behavior"],
+        "score": relative_score,
+        "status": "SUPPORTS" if relative_score == 1 else "CONFLICTS" if relative_score == -1 else "UNAVAILABLE",
+        "detail": "relative strength versus QQQ supports the direction" if relative_score == 1 else "relative strength versus QQQ conflicts with the direction" if relative_score == -1 else "relative strength is unavailable",
+    }
+
+    historical_rate = _safe_float(setup_stats.get("raw_hit_rate") if setup_stats.get("raw_hit_rate") is not None else setup_stats.get("raw_success_rate"))
+    historical_ev = _safe_float(setup_stats.get("expected_value_pct"))
+    historical_score: int | None = None
+    if historical_rate is not None or historical_ev is not None:
+        historical_score = 1 if (historical_rate is not None and historical_rate >= 0.55 and (historical_ev is None or historical_ev > 0)) else -1 if (historical_rate is not None and historical_rate < 0.5) or (historical_ev is not None and historical_ev <= 0) else 0
+    groups["historical_evidence"] = {
+        "label": "Historical evidence",
+        "weight": GROUPED_SCORE_WEIGHTS["historical_evidence"],
+        "score": historical_score,
+        "status": "SUPPORTS" if historical_score == 1 else "CONFLICTS" if historical_score == -1 else "NEUTRAL" if historical_score == 0 else "UNAVAILABLE",
+        "detail": f"historical setup evidence supports {side.lower()}" if historical_score == 1 else "historical setup evidence is weak or conflicting" if historical_score == -1 else "historical setup evidence is not sufficient",
+    }
+
+    option_score: int | None = None
+    if positioning:
+        aligned = ("call" in positioning) if bullish else ("put" in positioning)
+        opposing = ("put" in positioning) if bullish else ("call" in positioning)
+        option_score = 1 if aligned and not opposing else -1 if opposing and not aligned else 0
+    groups["options_structure"] = {
+        "label": "Options structure",
+        "weight": GROUPED_SCORE_WEIGHTS["options_structure"],
+        "score": option_score,
+        "status": "SUPPORTS" if option_score == 1 else "CONFLICTS" if option_score == -1 else "NEUTRAL" if option_score == 0 else "UNAVAILABLE",
+        "detail": f"options positioning {('supports' if option_score == 1 else 'conflicts with' if option_score == -1 else 'does not clearly confirm')} the direction" if option_score is not None else "options positioning is unavailable",
+    }
+
+    catalyst_score: int | None = None
+    if news_impact:
+        supports = ("support" in news_impact or "positive" in news_impact) if bullish else ("conflict" in news_impact or "negative" in news_impact)
+        conflicts = ("conflict" in news_impact or "negative" in news_impact) if bullish else ("support" in news_impact or "positive" in news_impact)
+        catalyst_score = 1 if supports else -1 if conflicts else 0
+    groups["catalyst_context"] = {
+        "label": "Catalyst context",
+        "weight": GROUPED_SCORE_WEIGHTS["catalyst_context"],
+        "score": catalyst_score,
+        "status": "SUPPORTS" if catalyst_score == 1 else "CONFLICTS" if catalyst_score == -1 else "NEUTRAL" if catalyst_score == 0 else "UNAVAILABLE",
+        "detail": "recent news reaction supports the direction" if catalyst_score == 1 else "recent news reaction conflicts with the direction" if catalyst_score == -1 else "news context is neutral or unavailable",
+    }
+
+    social_score_raw = _safe_float(social_payload.get("sentiment_score"))
+    social_score: int | None = None
+    if social_score_raw is not None and str(social_payload.get("classification") or "").upper() not in {"HYPE RISK", "PANIC RISK", "INSUFFICIENT DATA"}:
+        social_score = 1 if (social_score_raw > 10 if bullish else social_score_raw < -10) else -1 if (social_score_raw < -10 if bullish else social_score_raw > 10) else 0
+    groups["social_sentiment"] = {
+        "label": "Social sentiment",
+        "weight": GROUPED_SCORE_WEIGHTS["social_sentiment"],
+        "score": social_score,
+        "status": "SUPPORTS" if social_score == 1 else "CONFLICTS" if social_score == -1 else "NEUTRAL" if social_score == 0 else "UNAVAILABLE",
+        "detail": "social sentiment is supportive" if social_score == 1 else "social sentiment conflicts" if social_score == -1 else "social sentiment is supporting context only",
+    }
+    return groups
+
+
+def _grouped_score(groups: dict[str, dict[str, Any]]) -> float | None:
+    available = [row for row in groups.values() if row.get("score") is not None]
+    if not available:
+        return None
+    weight_total = sum(float(row.get("weight") or 0) for row in available)
+    if not weight_total:
+        return None
+    normalized = sum(float(row.get("score") or 0) * float(row.get("weight") or 0) for row in available) / weight_total
+    return round(max(0.0, min(100.0, 50.0 + normalized * 50.0)), 2)
+
+
+def _evidence(groups: dict[str, dict[str, Any]]) -> tuple[list[str], list[str]]:
+    supporting: list[str] = []
+    conflicts: list[str] = []
+    for row in groups.values():
+        detail = str(row.get("detail") or "").strip()
+        if not detail or row.get("status") == "UNAVAILABLE":
+            continue
+        if row.get("status") == "SUPPORTS":
+            supporting.append(detail)
+        elif row.get("status") == "CONFLICTS":
+            conflicts.append(detail)
+    return supporting[:3], conflicts[:2]
 
 
 def _probability_summary(stats: dict[str, Any]) -> dict[str, Any]:
@@ -519,7 +629,21 @@ def _candidate(db: Session, symbol: str, session: dict[str, Any]) -> dict[str, A
     )
     entry, invalidation = _entry_and_invalidation(side, feature_payload)
     targets = _targets(side, feature_payload, setup_stats)
-    supporting, conflicts = _evidence(side, feature_payload, scan, options_payload, news_payload)
+    feature_payload.setdefault("direction", side)
+    groups = _grouped_evidence(
+        side,
+        feature_payload,
+        scan,
+        options_payload,
+        news_payload,
+        social_payload,
+        setup_stats,
+        feature.setup_family if feature else None,
+    )
+    supporting, conflicts = _evidence(groups)
+    primary_groups = ("price_structure", "vwap_control", "volume_participation")
+    if any(groups.get(key, {}).get("score") != 1 for key in primary_groups):
+        gates.append("primary_signal_not_aligned")
     probability = _probability_summary(setup_stats)
     price = _latest_price(feature_payload, scan)
     setup_state = feature.setup_state if feature else "DATA INSUFFICIENT"
@@ -537,20 +661,7 @@ def _candidate(db: Session, symbol: str, session: dict[str, Any]) -> dict[str, A
         status = "READY FOR LIVE ANALYSIS" if session.get("actionable_live_quotes") else "READY FOR PLANNING"
 
     scoring_complete = bool(profile_payload and profile_payload.get("planning_ready") and scan and scan.score is not None and setup_stats and probability.get("expected_value") is not None)
-    score: float | None = 0.0 if scoring_complete else None
-    if scoring_complete:
-        score += (_safe_float(probability.get("expected_value")) or 0.0) * 10
-        score += (_safe_float(probability.get("target_before_invalidation_rate")) or 0.0) * 40
-        score += max(0.0, _safe_float(scan.score) or 0.0) * 3
-        score += max(0.0, _safe_float(options_payload.get("bias_score")) or 0.0) if side == "LONG" else max(0.0, -(_safe_float(options_payload.get("bias_score")) or 0.0))
-    # Social intelligence is deliberately capped at a small contribution and
-    # cannot affect hard-gate eligibility.
-    if social_payload.get("classification") not in {"HYPE RISK", "PANIC RISK", "INSUFFICIENT DATA"}:
-        social_score = _safe_float(social_payload.get("sentiment_score"), 0.0) or 0.0
-        if score is not None:
-            score += max(-5.0, min(5.0, social_score * 0.05))
-    if score is not None:
-        score -= len(gates) * 15
+    score: float | None = _grouped_score(groups) if scoring_complete else None
 
     if passes_hard_gates:
         primary_reason = supporting[0] if supporting else "deterministic gates passed"
@@ -576,6 +687,23 @@ def _candidate(db: Session, symbol: str, session: dict[str, Any]) -> dict[str, A
         "maximum_acceptable_option_entry": contract.get("max_reasonable_entry") if isinstance(contract, dict) else None,
         "primary_reason": primary_reason,
         "primary_risk": primary_risk,
+        "thesis": (
+            f"Price structure is aligned {side.lower()}, {groups['vwap_control']['detail']}, and {groups['volume_participation']['detail']}."
+            if groups.get("price_structure", {}).get("score") == 1
+            else "The setup is not fully confirmed by price structure, VWAP, and volume."
+        ),
+        "visible_conditions": {
+            "price_structure": groups.get("price_structure", {}).get("detail"),
+            "vwap": groups.get("vwap_control", {}).get("detail"),
+            "volume": groups.get("volume_participation", {}).get("detail"),
+            "key_level": entry.get("condition"),
+        },
+        "evidence_groups": groups,
+        "score_breakdown": {
+            "weights": GROUPED_SCORE_WEIGHTS,
+            "method": "One capped score per evidence group; hard gates remain separate.",
+            "available_groups": [key for key, row in groups.items() if row.get("score") is not None],
+        },
         "data_freshness": _data_freshness(profile_payload or {}, scan, option_snapshot),
         "supporting_factors": supporting,
         "conflicting_factors": conflicts,

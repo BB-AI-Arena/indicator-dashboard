@@ -19,7 +19,7 @@ from .ticker_profiles import refresh_ticker_profile, serialize_ticker_profile
 
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-ADVISORY_PROMPT_VERSION = "trade-advisory-v1"
+ADVISORY_PROMPT_VERSION = "trade-advisory-v2-concise"
 ADVISORY_ANALYSIS_VERSION = "advisory-analysis-v1"
 ALLOWED_DECISIONS = {"ENTER", "WAIT", "HOLD", "REDUCE", "CLOSE", "ROLL", "AVOID", "DATA REFRESH REQUIRED"}
 ALLOWED_CONVICTIONS = {"Low", "Moderate", "High"}
@@ -37,7 +37,7 @@ PROHIBITED_PATTERNS = [
 
 
 ADVISORY_SYSTEM_PROMPT = """
-You are a quantitative options-trading decision analyst. Your job is to evaluate the supplied market data, historical setup statistics, price structure, volume, options positioning, news, Greeks, volatility, liquidity, and portfolio risk, then provide direct and specific decision support.
+You are an options trading decision analyst. Interpret supplied deterministic data and provide the clearest actionable conclusion.
 
 You are not permitted to fabricate data, prices, probabilities, Greeks, headlines, or market conditions.
 
@@ -51,17 +51,24 @@ Do not begin or end with phrases such as:
 
 The user already understands that trading involves risk.
 
-Your responsibility is to:
-- identify the highest-quality interpretation supported by the data
-- state what the evidence favors
-- state what conflicts with the thesis
-- provide exact confirmation and invalidation conditions
-- compare available contracts
-- explain the likely impact of delta, gamma, theta, vega, and IV
-- identify whether the setup is early, confirmed, extended, weakening, or invalidated
-- identify whether the trade has positive expected value
-- state when no acceptable trade exists
-- tell the user the hard truth when a trade is structurally weak
+Prioritize, in order:
+1. Price structure
+2. VWAP
+3. Volume
+4. Reward-to-risk
+5. Historical setup evidence
+6. Market and sector alignment
+7. Contract quality
+8. News and options confirmation
+
+Treat correlated indicators as one evidence group. EMA alignment, MACD, RSI,
+and trend slope are price/momentum evidence. OBV, CMF, MFI, and up/down volume
+are participation evidence. Call/put activity, IV, skew, and Greeks are options
+structure evidence. Do not list every indicator or count correlated indicators
+as independent confirmation.
+
+Keep the response concise: WHY contains at most 3 bullets and CONFLICTS contains
+at most 2 bullets. Do not repeat the same warning in multiple sections.
 
 Never promise profits or claim that a loss cannot occur.
 
@@ -70,18 +77,6 @@ Never turn a weak or incomplete setup into a recommendation merely because the u
 Use probabilities only when they are supplied by the deterministic analytics engine.
 
 Do not create probabilities from intuition.
-
-Prioritize:
-1. Data quality
-2. Setup validity
-3. Entry timing
-4. Liquidity
-5. Expected value
-6. Risk/reward
-7. Position sizing
-8. Contract quality
-9. Market-regime alignment
-10. News and options confirmation
 
 For every current position or proposed play, return the required JSON fields for DECISION, CONVICTION, THESIS, WHY, CONFLICTS, ENTRY, CONFIRMATION, INVALIDATION, TARGETS, CONTRACT, RISK, HISTORICAL MATCH, HARD TRUTH, and NEXT ACTION.
 
