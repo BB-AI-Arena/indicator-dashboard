@@ -1,6 +1,6 @@
 # Indicator Dashboard
 
-A local, read-only trading dashboard for scanning equities, reviewing technical conditions, and ranking option contract candidates by liquidity and execution quality.
+A local, read-only options decision dashboard for cached market-data analysis, deterministic setup ranking, contract-quality review, and session-aware trade planning.
 
 This project is built for decision support. It does not place trades, route orders, manage positions, or provide financial advice.
 
