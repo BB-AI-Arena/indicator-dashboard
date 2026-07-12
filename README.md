@@ -4,6 +4,22 @@ A local, read-only options decision dashboard for cached market-data analysis, d
 
 This project is built for decision support. It does not place trades, route orders, manage positions, or provide financial advice.
 
+## Make Better Options Decisions
+
+Indicator Command Center turns a noisy options workflow into a focused decision page. It brings market regime, price structure, money flow, options positioning, catalysts, historical setup behavior, contract quality, and risk conditions into one place so the next action is clear.
+
+Instead of forcing a trade from an incomplete signal, the dashboard separates:
+
+- **Best current setups** from setups that are still forming.
+- **Real E*TRADE positions** from the isolated paper portfolio.
+- **Historical evidence** from live-session confirmation.
+- **Executable quote data** from previous-session planning data.
+- **Deterministic scoring** from optional AI explanations.
+
+Every candidate is tied to an entry trigger, invalidation level, target areas, contract choice, liquidity checks, historical sample size, expected value, and the conditions that would cancel the thesis. When the evidence is incomplete or the risk/reward is poor, the platform can say no trade.
+
+The result is a practical research and trade-management workspace for traders who want richer context without sacrificing traceability, data freshness, or control over their own decisions.
+
 ## Core Capabilities
 
 - **Technical scanner**: scores watchlist symbols as `LONG`, `SHORT`, or `NEUTRAL` using VWAP, EMA alignment, RSI, MACD, Bollinger midpoint, volume, and prior-bar break logic.
