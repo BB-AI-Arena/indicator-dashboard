@@ -109,6 +109,21 @@ def _json_loads(value: str | None, default: Any) -> Any:
         return default
 
 
+def _json_object(value: str | None) -> dict[str, Any]:
+    parsed = _json_loads(value, {})
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _trade_entry_value(trade: Any) -> dict[str, Any]:
+    """Return optional entry context without allowing null JSON to break review analytics."""
+    context = _json_object(getattr(trade, "market_context_json", None))
+    entry = context.get("entry") or {}
+    if not isinstance(entry, dict):
+        return {}
+    value = entry.get("value") or {}
+    return value if isinstance(value, dict) else {}
+
+
 def _sha1(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
@@ -123,6 +138,20 @@ def _parse_iso(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _etrade_date(value: str | None) -> str:
+    text = _safe_text(value)
+    try:
+        return datetime.strptime(text[:10], "%Y-%m-%d").strftime("%m%d%Y")
+    except ValueError:
+        pass
+    parsed = _parse_iso(value)
+    if parsed:
+        return parsed.astimezone(ET_TZ).strftime("%m%d%Y")
+    if len(text) == 8 and text.isdigit():
+        return text
+    return text
 
 
 def _to_et(value: str | datetime | None) -> str | None:
@@ -234,7 +263,16 @@ def _etrade_request_json(endpoint: str, params: dict[str, Any] | None = None) ->
     if response.status_code == 429:
         raise ProviderError("E*TRADE rate limited", rate_limited=True, provider="etrade")
     if response.status_code >= 400:
-        raise ProviderError(f"E*TRADE API error {response.status_code}", provider="etrade")
+        detail = ""
+        try:
+            error_payload = response.json().get("Error") or response.json().get("error") or {}
+            if isinstance(error_payload, dict):
+                code = error_payload.get("code") or error_payload.get("Code")
+                message = error_payload.get("message") or error_payload.get("Message")
+                detail = f" ({code}): {message}" if code or message else ""
+        except Exception:
+            detail = ""
+        raise ProviderError(f"E*TRADE API error {response.status_code}{detail}", provider="etrade")
 
     try:
         return response.json()
@@ -327,7 +365,7 @@ def _extract_marker(payload: dict[str, Any]) -> str | None:
         value = payload.get(key)
         if value not in (None, ""):
             return _safe_text(value)
-    for outer in ("TransactionList", "transactionList", "OrderList", "orderList", "Transactions", "transactions", "Orders", "orders"):
+    for outer in ("TransactionListResponse", "transactionListResponse", "TransactionList", "transactionList", "OrdersResponse", "ordersResponse", "OrderList", "orderList", "Transactions", "transactions", "Orders", "orders"):
         node = payload.get(outer)
         if isinstance(node, dict):
             for key in ("marker", "Marker", "nextMarker", "next_marker"):
@@ -449,7 +487,14 @@ def _extract_fill_timestamp(record: dict[str, Any]) -> datetime | None:
         "time",
         "timestamp",
     ):
-        parsed = _parse_iso(_safe_text(_first_value(record, key)))
+        raw_value = _first_value(record, key)
+        if isinstance(raw_value, (int, float)) and raw_value > 0:
+            try:
+                seconds = float(raw_value) / 1000.0 if float(raw_value) > 100_000_000_000 else float(raw_value)
+                return datetime.fromtimestamp(seconds, timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                pass
+        parsed = _parse_iso(_safe_text(raw_value))
         if parsed:
             return parsed
     return None
@@ -506,6 +551,18 @@ def _extract_symbol_fields(record: dict[str, Any]) -> dict[str, Any]:
         )
     )
     parsed = parse_option_symbol(symbol_text)
+    if not parsed.get("call_put"):
+        root = _safe_text(_first_value(record, "symbol", "rootSymbol", "root_symbol")).upper()
+        call_put = _safe_text(_first_value(record, "callPut", "call_put")).upper()
+        year = _safe_int(_first_value(record, "expiryYear", "expirationYear", "expiration_year"))
+        month = _safe_int(_first_value(record, "expiryMonth", "expirationMonth", "expiration_month"))
+        day = _safe_int(_first_value(record, "expiryDay", "expirationDay", "expiration_day"))
+        strike = _safe_float(_first_value(record, "strikePrice", "strike", "strike_price"))
+        if root and call_put in {"CALL", "PUT", "C", "P"} and year and month and day and strike is not None:
+            cp = "C" if call_put in {"CALL", "C"} else "P"
+            full_year = year + 2000 if year < 100 else year
+            occ = f"{root}{full_year % 100:02d}{month:02d}{day:02d}{cp}{int(round(strike * 1000)):08d}"
+            parsed = parse_option_symbol(occ)
     if not parsed.get("underlying_symbol"):
         parsed["underlying_symbol"] = _safe_text(_first_value(record, "underlyingSymbol", "underlying_symbol", "rootSymbol", "root_symbol")).upper() or None
     if not parsed.get("option_symbol"):
@@ -651,7 +708,67 @@ def _extract_leg_records(record: dict[str, Any]) -> list[dict[str, Any]]:
     return [record]
 
 
+def _expand_etrade_record(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten E*TRADE transaction and order nesting into fill-like records."""
+    if record.get("_etrade_flattened"):
+        return [record]
+    base = dict(record)
+    base["_etrade_flattened"] = True
+    brokerage = base.get("brokerage") or base.get("Brokerage")
+    if isinstance(brokerage, dict):
+        base.update(brokerage)
+        product = brokerage.get("product") or brokerage.get("Product")
+        if isinstance(product, dict):
+            base.update(product)
+            product_id = product.get("productId") or product.get("ProductId")
+            if isinstance(product_id, dict):
+                base.update(product_id)
+
+    details = base.get("OrderDetail") or base.get("orderDetail") or base.get("orderDetails")
+    if isinstance(details, dict):
+        details = [details]
+    if not isinstance(details, list):
+        return [base] if isinstance(brokerage, dict) else [record]
+
+    expanded: list[dict[str, Any]] = []
+    for detail in details:
+        if not isinstance(detail, dict):
+            continue
+        detail_base = {**base, **detail}
+        instruments = detail.get("Instrument") or detail.get("instrument") or detail.get("Instruments") or detail.get("instruments")
+        if isinstance(instruments, dict):
+            instruments = [instruments]
+        if not isinstance(instruments, list):
+            instruments = [detail]
+        for instrument in instruments:
+            if not isinstance(instrument, dict):
+                continue
+            flattened = {**detail_base, **instrument}
+            product = instrument.get("Product") or instrument.get("product")
+            if isinstance(product, dict):
+                flattened.update(product)
+                product_id = product.get("productId") or product.get("ProductId")
+                if isinstance(product_id, dict):
+                    flattened.update(product_id)
+            expanded.append(flattened)
+    return expanded or [base]
+
+
+def _account_payload(account: TradeReviewAccount) -> dict[str, Any]:
+    return {
+        "account_ref": account.account_ref,
+        "account_id_key": account.account_id_key,
+        "account_mask": account.account_mask,
+    }
+
+
 def _record_to_fills(account: dict[str, Any], source_type: str, record: dict[str, Any]) -> list[dict[str, Any]]:
+    expanded_records = _expand_etrade_record(record)
+    if expanded_records != [record]:
+        fills: list[dict[str, Any]] = []
+        for expanded in expanded_records:
+            fills.extend(_record_to_fills(account, source_type, expanded))
+        return fills
     order_id = _safe_text(_first_value(record, "orderId", "order_id", "orderNumber", "order_number")) or None
     parent_order_id = _safe_text(_first_value(record, "parentOrderId", "parent_order_id")) or order_id
     record_id = _safe_text(_first_value(record, "transactionId", "transaction_id", "id", "orderNumber", "order_number")) or None
@@ -707,6 +824,8 @@ def _record_to_fills(account: dict[str, Any], source_type: str, record: dict[str
 def _upsert_fill(db: Session, fill: dict[str, Any]) -> bool:
     existing = db.query(TradeReviewFill).filter(TradeReviewFill.source_hash == fill["source_hash"]).first()
     if existing:
+        return False
+    if any(isinstance(item, TradeReviewFill) and item.source_hash == fill["source_hash"] for item in db.new):
         return False
     db.add(TradeReviewFill(**fill, created_at=now_iso(), updated_at=now_iso()))
     return True
@@ -1786,9 +1905,10 @@ def _sync_account(db: Session, run: TradeReviewSyncRun, account: TradeReviewAcco
     try:
         tx_records, _ = _paginate_records(
             f"/v1/accounts/{account.account_id_key}/transactions.json",
-            params={"startDate": from_date, "endDate": to_date, "count": 100},
+            params={"startDate": _etrade_date(from_date), "endDate": _etrade_date(to_date), "count": 50},
             symbol=account.account_id_key,
             collection_paths=[
+                ("TransactionListResponse", "Transaction"),
                 ("TransactionList", "Transaction"),
                 ("transactionList", "Transaction"),
                 ("TransactionList", "transaction"),
@@ -1801,7 +1921,7 @@ def _sync_account(db: Session, run: TradeReviewSyncRun, account: TradeReviewAcco
         run.current_message = f"Imported {transactions_imported} transactions for {account.account_mask}"
         db.commit()
         for index, record in enumerate(tx_records):
-            fills = _record_to_fills(account.__dict__, "transaction", record)
+            fills = _record_to_fills(_account_payload(account), "transaction", record)
             for fill in fills:
                 if _upsert_fill(db, fill):
                     fills_imported += 1
@@ -1809,14 +1929,16 @@ def _sync_account(db: Session, run: TradeReviewSyncRun, account: TradeReviewAcco
     except Exception as exc:
         errors += 1
         last_error = str(exc)
+        db.rollback()
         record_provider_error("etrade", account.account_id_key, "/v1/accounts/{accountIdKey}/transactions.json", exc)
 
     try:
         order_records, _ = _paginate_records(
             f"/v1/accounts/{account.account_id_key}/orders.json",
-            params={"fromDate": from_date, "toDate": to_date, "count": 100},
+            params={"fromDate": _etrade_date(from_date), "toDate": _etrade_date(to_date), "count": 50},
             symbol=account.account_id_key,
             collection_paths=[
+                ("OrdersResponse", "Order"),
                 ("OrderList", "Order"),
                 ("orderList", "Order"),
                 ("orders",),
@@ -1829,7 +1951,7 @@ def _sync_account(db: Session, run: TradeReviewSyncRun, account: TradeReviewAcco
         run.current_message = f"Imported {orders_imported} orders for {account.account_mask}"
         db.commit()
         for index, record in enumerate(order_records):
-            fills = _record_to_fills(account.__dict__, "order", record)
+            fills = _record_to_fills(_account_payload(account), "order", record)
             for fill in fills:
                 if _upsert_fill(db, fill):
                     fills_imported += 1
@@ -1837,6 +1959,7 @@ def _sync_account(db: Session, run: TradeReviewSyncRun, account: TradeReviewAcco
     except Exception as exc:
         errors += 1
         last_error = str(exc)
+        db.rollback()
         record_provider_error("etrade", account.account_id_key, "/v1/accounts/{accountIdKey}/orders.json", exc)
 
     run.transactions_imported += transactions_imported
@@ -1996,14 +2119,13 @@ def serialize_sync_run(db: Session, run: TradeReviewSyncRun | None) -> dict[str,
         "last_error": run.last_error,
         "started_at": run.started_at,
         "finished_at": run.finished_at,
-        "message": run.message,
+        "message": getattr(run, "message", None) or run.current_message,
     }
 
 
 def get_active_sync_run(db: Session) -> TradeReviewSyncRun | None:
     return (
         db.query(TradeReviewSyncRun)
-        .filter(TradeReviewSyncRun.status.in_(["PENDING", "RUNNING", "FAILED"]))
         .order_by(desc(TradeReviewSyncRun.started_at))
         .first()
     )
@@ -2072,7 +2194,7 @@ def _trade_row_to_payload(trade: TradeReviewTrade) -> dict[str, Any]:
     grade_breakdown = _json_loads(trade.grade_breakdown_json, {}) if trade.grade_breakdown_json else {}
     pattern_tags = _json_loads(trade.pattern_tags_json, [])
     missing_data = _json_loads(trade.missing_data_json, [])
-    market_context = _json_loads(trade.market_context_json, {}) if trade.market_context_json else {}
+    market_context = _json_object(trade.market_context_json)
     if not pattern_tags:
         pattern_tags = _trade_pattern_tags(trade.__dict__, market_context)
     entry_value = (market_context.get("entry") or {}).get("value") or {}
@@ -2230,7 +2352,7 @@ def build_pattern_analysis(db: Session, filters: dict[str, Any]) -> dict[str, An
     tagged_rows: list[tuple[TradeReviewTrade, list[str]]] = []
     flow_rows: list[dict[str, Any]] = []
     for trade in rows:
-        market_context = _json_loads(trade.market_context_json, {}) if trade.market_context_json else {}
+        market_context = _json_object(trade.market_context_json)
         tags = _trade_pattern_tags(trade.__dict__, market_context)
         tagged_rows.append((trade, tags))
         entry_flow = (market_context.get("entry") or {}).get("money_flow") or {}
@@ -2282,10 +2404,10 @@ def build_pattern_analysis(db: Session, filters: dict[str, Any]) -> dict[str, An
     pnl_by_ticker = _group_pnl(rows, lambda t: t.underlying_symbol or "UNKNOWN")
     pnl_by_setup = _group_pnl(rows, lambda t: t.setup_type or "UNKNOWN")
     pnl_by_dte = _group_pnl(rows, lambda t: _bucket_dte(t.dte_at_entry))
-    pnl_by_delta = _group_pnl(rows, lambda t: _bucket_delta(_safe_float(_json_loads(t.market_context_json, {}).get("entry", {}).get("value", {}).get("delta"))))
+    pnl_by_delta = _group_pnl(rows, lambda t: _bucket_delta(_safe_float(_trade_entry_value(t).get("delta"))))
     pnl_by_weekday = _group_pnl(rows, lambda t: _market_day_label(t.opening_timestamp_utc))
-    pnl_by_spread = _group_pnl(rows, lambda t: _bucket_spread(_safe_float(_json_loads(t.market_context_json, {}).get("entry", {}).get("value", {}).get("spread_pct"))))
-    pnl_by_volume = _group_pnl(rows, lambda t: _bucket_volume(_safe_int(_json_loads(t.market_context_json, {}).get("entry", {}).get("value", {}).get("underlying_candle", {}).get("volume"))))
+    pnl_by_spread = _group_pnl(rows, lambda t: _bucket_spread(_safe_float(_trade_entry_value(t).get("spread_pct"))))
+    pnl_by_volume = _group_pnl(rows, lambda t: _bucket_volume(_safe_int((_trade_entry_value(t).get("underlying_candle") or {}).get("volume"))))
 
     if pnl_by_ticker:
         best_edge = pnl_by_ticker[0]["bucket"]
