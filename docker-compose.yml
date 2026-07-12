@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: indicator-dashboard-backend
+    env_file:
+      - ./.env
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      DATABASE_PATH: /app/data/indicator.db
+      CONFIG_PATH: /app/config/config.yml
+    volumes:
+      - ./data:/app/data
+      - ./config/config.yml:/app/config/config.yml:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    container_name: indicator-dashboard-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped

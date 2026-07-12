@@ -1,0 +1,372 @@
+scan:
+  symbols:
+    - SPY
+    - QQQ
+    - AAPL
+    - MSFT
+    - META
+    - CRWD
+    - UNH
+    - NVDA
+    - TSLA
+  interval: 5m
+  period: 5d
+  sleep_seconds: 300
+  min_score_to_alert: 6
+  alert_cooldown_minutes: 30
+
+indicators:
+  ema_fast: 8
+  ema_slow: 21
+  ema_trend: 50
+  rsi_period: 14
+  atr_period: 14
+  bollinger_period: 20
+  bollinger_std: 2
+  volume_avg_period: 20
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+
+options:
+  enabled: true
+  expirations_to_check: 3
+  option_chain_strike_count: 20
+  min_volume: 50
+  min_open_interest: 100
+  max_spread_pct: 15
+  recommended_max_spread_pct: 5
+  max_quote_age_seconds: 300
+  max_underlying_mismatch_pct: 1
+  preferred_delta_min: 0.30
+  preferred_delta_max: 0.55
+
+ai:
+  enabled: true
+  model: gpt-5.6
+  timeout_seconds: 45
+  position_advice_timeout_seconds: 45
+  fallback_model: gpt-5.4-mini
+
+advisory:
+  enabled: true
+  deterministic_only: false
+  model: gpt-5.6
+  fallback_model: gpt-5.4-mini
+  reasoning_effort: high
+  advisory_mode: standard
+  max_output_tokens: 1400
+  timeout_seconds: 45
+  maximum_calls_per_hour: 20
+  cache_duration_seconds: 1800
+  maximum_advisory_cost: 5.0
+  prompt_version: trade-advisory-v1
+  response_schema_version: advisory-response-v1
+
+ticker_profiles:
+  enabled: true
+  backfill_on_add: true
+  refresh_on_profile_view: false
+  backfill_period: 3y
+  backfill_intervals:
+    - 15m
+    - 1d
+  keep_profile_when_removed_from_watchlist: true
+
+decision_dashboard:
+  core_universe:
+    - AAPL
+    - MSFT
+    - NVDA
+    - AMZN
+    - GOOGL
+    - META
+    - TSLA
+    - PLTR
+    - SPCX
+    - CRM
+    - CAT
+    - JPM
+    - PANW
+    - CRWD
+  require_profile_complete: true
+  require_fibonacci_behavior: true
+  require_news_current: true
+  news_current_max_age_hours: 168
+  required_intervals:
+    15m:
+      min_rows: 40
+    1d:
+      min_rows: 30
+  min_historical_examples: 10
+  min_reward_to_risk: 1.5
+  min_expected_value_pct: 0.01
+  max_cards:
+    next_best: 3
+    forming: 6
+
+profile_completeness:
+  profile_version: ticker-profile-v2
+  live_quote_max_age_seconds: 120
+  live_candle_max_age_seconds: 1800
+  live_option_max_age_seconds: 180
+  planning_required_components:
+    - symbol_profile
+    - daily_history
+    - intraday_history
+    - candle_gaps
+    - indicators
+    - support_resistance
+    - fibonacci
+    - setup_history
+    - historical_sample
+    - market_regime
+    - relative_strength
+    - news
+    - news_reaction
+    - options_chain
+    - options_positioning
+    - deterministic_score
+    - data_quality
+
+data:
+  quotes_provider: etrade
+  options_provider: etrade
+  candles_provider: yahoo
+  earnings_provider: alphavantage
+  earnings_provider_fallback: finnhub
+  historical_candles_provider: alphavantage
+  historical_candles_provider_fallback: yahoo
+  quotes_provider_fallback: finnhub
+  options_provider_fallback: none
+  candles_provider_fallback: none
+  fallback_provider: yahoo
+  cache_enabled: true
+  backtest_mode: auto
+
+alphavantage:
+  base_url: https://www.alphavantage.co/query
+  timeout_seconds: 20
+  output_format: json
+  daily_outputsize: full
+  adjusted_outputsize: full
+  intraday_outputsize: full
+  intraday_extended_hours: true
+  intraday_adjusted: true
+  daily_prefer_adjusted: true
+  mode_ttl_seconds: 86400
+
+finnhub:
+  base_url: https://finnhub.io/api/v1
+  timeout_seconds: 20
+  candles_enabled: false
+
+rate_limits:
+  enabled: true
+
+  yahoo:
+    requests_per_minute: 1
+    requests_per_hour: 30
+    min_seconds_between_requests: 75
+    backoff_initial_seconds: 900
+    backoff_max_seconds: 7200
+    cooldown_after_rate_limit_seconds: 3600
+    max_retries: 0
+
+  stooq:
+    requests_per_minute: 2
+    requests_per_hour: 60
+    min_seconds_between_requests: 30
+    backoff_initial_seconds: 600
+    backoff_max_seconds: 21600
+    cooldown_after_rate_limit_seconds: 21600
+    max_retries: 0
+
+  etrade:
+    requests_per_minute: 60
+    min_seconds_between_requests: 1
+    backoff_initial_seconds: 10
+    backoff_max_seconds: 300
+    cooldown_after_rate_limit_seconds: 600
+    max_retries: 3
+
+  openai:
+    requests_per_minute: 20
+    min_seconds_between_requests: 3
+    backoff_initial_seconds: 10
+    backoff_max_seconds: 300
+    cooldown_after_rate_limit_seconds: 300
+    max_retries: 2
+
+  alphavantage:
+    requests_per_minute: 5
+    requests_per_hour: 500
+    min_seconds_between_requests: 12
+    backoff_initial_seconds: 30
+    backoff_max_seconds: 900
+    cooldown_after_rate_limit_seconds: 1800
+    max_retries: 3
+
+  finnhub:
+    requests_per_minute: 20
+    requests_per_hour: 500
+    min_seconds_between_requests: 3
+    backoff_initial_seconds: 10
+    backoff_max_seconds: 300
+    cooldown_after_rate_limit_seconds: 600
+    max_retries: 3
+
+security:
+  strict_texas_only: true
+  allow_private_networks: true
+  geo_lookup_timeout_seconds: 2
+  login_block_minutes: 15
+  allowed_ips:
+    - 127.0.0.1
+    - ::1
+  allowed_cidrs: []
+
+history:
+  enabled: true
+  default_period: 3y
+  intervals:
+    - 5m
+    - 15m
+    - 1d
+  update_schedule: nightly
+  score_threshold: 6
+  throttle_seconds_between_symbols: 90
+  throttle_seconds_between_intervals: 180
+  max_symbols_per_run: 0
+  backfill_chunk_days_intraday: 7
+  backfill_chunk_days_daily: 365
+  skip_existing_ranges: true
+  resume_incomplete_backfills: true
+  intraday_initial_days: 90
+
+historical_patterns:
+  enabled: true
+  interval: 15m
+  default_period: 3y
+  feature_version: setup_features_v1
+  outcome_version: setup_outcomes_v1
+  matching_version: weighted_knn_v1
+  similarity_threshold: 68
+  min_examples: 10
+  moderate_examples: 30
+  strong_examples: 100
+  max_matches_per_scope: 250
+  max_cross_symbols: 50
+  event_gap_bars: 8
+  target_1_atr: 1.0
+  target_2_atr: 1.5
+  invalidation_atr: 0.75
+  min_usable_move_pct: 0.35
+  modeled_cost_pct: 0.4
+  backfill_period: 3y
+  backfill_intervals:
+    - 15m
+    - 1d
+  include_contract_selection: true
+
+yahoo_worker:
+  enabled: false
+  symbol_delay_seconds: 30
+  idle_delay_seconds: 10
+  max_backoff_seconds: 300
+
+stooq:
+  base_url: https://stooq.com/q/d/l/
+  timeout_seconds: 20
+
+etrade:
+  enabled: true
+  sandbox: false
+  base_url_live: https://api.etrade.com
+  base_url_sandbox: https://apisb.etrade.com
+  callback_url: http://localhost:8001/api/auth/etrade/callback
+  request_timeout_seconds: 8
+  token_refresh_margin_seconds: 120
+
+cache:
+  quotes_ttl_seconds: 10
+  candles_ttl_seconds: 60
+  option_expirations_ttl_seconds: 86400
+  option_chains_ttl_seconds: 60
+  scan_ttl_seconds: 60
+  etrade_positions_ttl_seconds: 60
+  market_closed_ttl_seconds: 18000
+
+news:
+  enabled: true
+  cache_ttl_seconds: 180
+  request_timeout_seconds: 8
+  max_items: 28
+  catalyst_lookback_days: 7
+  catalyst_major_lookback_days: 30
+  catalyst_future_days: 14
+  historical_lookback_trading_days: 5
+  historical_post_exit_days: 2
+  feeds:
+    - name: MarketWatch Top Stories
+      url: https://feeds.marketwatch.com/marketwatch/topstories/
+    - name: MarketWatch MarketPulse
+      url: https://feeds.marketwatch.com/marketwatch/marketpulse/
+    - name: Nasdaq Stocks
+      url: https://www.nasdaq.com/feed/rssoutbound?category=Stocks
+    - name: Nasdaq Markets
+      url: https://www.nasdaq.com/feed/rssoutbound?category=Markets
+
+earnings:
+  enabled: true
+  cache_ttl_seconds: 1800
+  request_timeout_seconds: 8
+  max_items: 40
+  watchlist_only: true
+
+earnings_history:
+  enabled: true
+  provider: alphavantage
+  fallback_provider: finnhub
+  lookback_days: 365
+  cache_ttl_seconds: 86400
+
+social:
+  enabled: true
+  lookback_days: 7
+  baseline_days: 30
+  source_cache_ttl_seconds: 900
+  request_timeout_seconds: 8
+  relevance_threshold: 0.70
+  minimum_mentions: 5
+  minimum_unique_authors: 3
+  spam_threshold: 0.45
+  max_items_per_source: 200
+  aliases: {}
+  # Add only feeds or authenticated API endpoints you are authorized to use.
+  # JSON sources may set token_env and fields without placing credentials here.
+  sources: []
+
+paper_portfolio:
+  enabled: true
+  account_equity: 100000
+  max_deployment_pct: 75
+  reserve_pct: 25
+  concentration_mode: aggressive
+  normal_ticker_exposure_pct: 20
+  aggressive_ticker_exposure_pct: 35
+  exceptional_ticker_exposure_pct: 50
+  profit_trail_activation_pct: 15
+  profit_trail_pct: 5
+  trailing_mode: STRICT_5_PERCENT
+  stop_execution_mode: CONSERVATIVE_STOP_MARKET
+  simulated_slippage_pct: 1
+  gap_risk_pct: 5
+  iv_contraction_risk_pct: 3
+  liquidity_failure_risk_pct: 5
+  overnight_probability_threshold_pct: 70
+  minimum_overnight_sample: 30
+  minimum_overnight_dte: 7
+  overnight_max_spread_pct: 5
+  mandatory_loser_review_et: "15:30"
+  mandatory_loser_cutoff_et: "15:50"
