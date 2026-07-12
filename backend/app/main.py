@@ -1670,7 +1670,9 @@ def advisory_for_symbol(symbol: str, request: Request, payload: dict[str, Any] |
 @app.get("/api/candles/{symbol}")
 def candles(symbol: str, interval: str = "5m", period: str = "5d", refresh: bool = False):
     try:
-        df = fetch_candles(symbol, interval=interval, period=period, refresh=refresh)
+        # Read persisted candles first. Explicit refresh is the only path that
+        # is allowed to wait on a provider for an already-covered range.
+        df = fetch_candles(symbol, interval=interval, period=period, refresh=refresh, prefer_stored=not refresh)
         return _candles_to_json(df)
     except DataProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1687,7 +1689,9 @@ def quote(symbol: str):
 @app.get("/api/indicators/{symbol}")
 def indicators(symbol: str, interval: str = "5m", period: str = "5d", refresh: bool = False):
     try:
-        df = fetch_candles(symbol, interval=interval, period=period, refresh=refresh)
+        # Indicator views are read-first so a provider timeout cannot hide
+        # historical data already stored in SQLite.
+        df = fetch_candles(symbol, interval=interval, period=period, refresh=refresh, prefer_stored=not refresh)
         data_meta = dict(getattr(df, "attrs", {}) or {})
         cfg = config_manager.get("indicators", default={})
         enriched = apply_indicators(df, cfg)
