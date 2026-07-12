@@ -585,6 +585,11 @@ def _hard_gates(
     min_ev = _safe_float(cfg.get("min_expected_value_pct"), 0.01) or 0.01
     if expected_value is None or expected_value < min_ev:
         gates.append("expected_value_not_positive")
+    if bool(cfg.get("require_expected_value_after_adverse_fill", True)):
+        adverse_fill_pct = _safe_float(cfg.get("adverse_fill_penalty_pct"), 5.0) or 5.0
+        minimum_net_ev = _safe_float(cfg.get("minimum_expected_value_after_adverse_fill_pct"), 0.25) or 0.25
+        if expected_value is None or expected_value - adverse_fill_pct < minimum_net_ev:
+            gates.append("expected_value_does_not_cover_adverse_fill")
     if not option_snapshot:
         gates.append("options_chain_snapshot_missing")
     if bool(cfg.get("require_news_current", True)) and not _news_is_current(news):

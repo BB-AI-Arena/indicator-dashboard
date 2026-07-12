@@ -62,6 +62,64 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def adverse_fill_penalty_pct() -> float:
+    cfg = config_manager.get("paper_portfolio", default={}) or {}
+    value = _safe_float(cfg.get("adverse_fill_penalty_pct"))
+    return max(0.0, value if value is not None else 5.0)
+
+
+def adverse_fill_price(intended_price: float, side: str, penalty_pct: float | None = None) -> float:
+    """Apply a conservative adverse fill to a simulated option order.
+
+    Buying is simulated above the intended price; selling is simulated below
+    the intended price. This models execution friction without changing real
+    brokerage records.
+    """
+    penalty = adverse_fill_penalty_pct() if penalty_pct is None else max(0.0, float(penalty_pct))
+    factor = 1.0 + penalty / 100.0 if str(side).upper().startswith("BUY") else 1.0 - penalty / 100.0
+    return round(max(0.0001, intended_price * factor), 6)
+
+
+def _recommendation_expected_value_pct(recommendation: PaperRecommendation | None) -> float | None:
+    if not recommendation:
+        return None
+    try:
+        snapshot = json.loads(recommendation.snapshot_json or "{}")
+    except Exception:
+        snapshot = {}
+    candidate = snapshot.get("candidate") or {}
+    historical = candidate.get("historical_match") or {}
+    for value in (
+        candidate.get("expected_value_after_costs_pct"),
+        candidate.get("expected_value_estimate"),
+        candidate.get("expected_value_pct"),
+        historical.get("expected_value"),
+        historical.get("expected_value_pct"),
+    ):
+        parsed = _safe_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _require_expected_value_after_adverse_fill(payload: dict[str, Any], recommendation: PaperRecommendation | None) -> dict[str, float]:
+    cfg = config_manager.get("paper_portfolio", default={}) or {}
+    penalty = adverse_fill_penalty_pct()
+    expected = _safe_float(payload.get("expected_value_after_costs_pct"))
+    if expected is None:
+        expected = _recommendation_expected_value_pct(recommendation)
+    if not bool(cfg.get("require_positive_ev_after_adverse_fill", True)):
+        return {"expected_value_pct": expected, "adverse_fill_penalty_pct": penalty, "net_expected_value_pct": (expected - penalty) if expected is not None else None}
+    if expected is None:
+        raise ValueError("opening paper trades require deterministic expected value after costs; AI cannot substitute for missing data")
+    minimum_net = _safe_float(cfg.get("minimum_expected_value_after_adverse_fill_pct"))
+    minimum_net = minimum_net if minimum_net is not None else 0.25
+    net_expected = expected - penalty
+    if net_expected < minimum_net:
+        raise ValueError(f"paper trade rejected: expected value after the {penalty:g}% adverse-fill assumption is only {net_expected:.2f}%")
+    return {"expected_value_pct": expected, "adverse_fill_penalty_pct": penalty, "net_expected_value_pct": net_expected}
+
+
 def ensure_default_portfolio(db: Session) -> PaperPortfolio:
     portfolio = db.query(PaperPortfolio).filter(PaperPortfolio.name == "Default Paper Challenge").first()
     if portfolio:
@@ -242,23 +300,25 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
     if not symbol:
         raise ValueError("symbol is required")
     quantity = _safe_float(payload.get("quantity"))
-    fill_price = _safe_float(payload.get("fill_price"))
-    if not quantity or quantity <= 0 or not fill_price or fill_price <= 0:
+    intended_fill_price = _safe_float(payload.get("fill_price"))
+    if not quantity or quantity <= 0 or not intended_fill_price or intended_fill_price <= 0:
         raise ValueError("positive quantity and fill_price are required")
     side = str(payload.get("side") or "BUY_TO_OPEN").upper()
     if side not in {"BUY_TO_OPEN", "SELL_TO_OPEN", "SELL_TO_CLOSE", "BUY_TO_CLOSE"}:
         raise ValueError("unsupported paper order side")
+    fill_assumption = _require_expected_value_after_adverse_fill(payload, recommendation) if side in {"BUY_TO_OPEN", "SELL_TO_OPEN"} else {"expected_value_pct": _safe_float(payload.get("expected_value_after_costs_pct")), "adverse_fill_penalty_pct": adverse_fill_penalty_pct(), "net_expected_value_pct": None}
+    executed_fill_price = adverse_fill_price(intended_fill_price, side, fill_assumption["adverse_fill_penalty_pct"])
     exit_plan = payload.get("exit_plan")
     if side in {"BUY_TO_OPEN", "SELL_TO_OPEN"}:
         plan_input = {
             **payload,
             "direction": "SHORT" if side == "SELL_TO_OPEN" else "LONG",
-            "entry_option_price": fill_price,
+            "entry_option_price": executed_fill_price,
         }
         exit_plan = exit_plan or build_exit_plan(plan_input)
         if not is_complete_exit_plan(exit_plan):
             raise ValueError("opening paper trades require a complete exit_plan with entry, invalidation, target 1, and target 2")
-    notional = quantity * fill_price * 100.0
+    notional = quantity * executed_fill_price * 100.0
     if side in {"BUY_TO_OPEN", "BUY_TO_CLOSE"} and portfolio.cash < notional:
         raise ValueError("insufficient paper cash")
     now = _now()
@@ -272,9 +332,9 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
         contract_symbol=payload.get("contract_symbol"),
         side=side,
         quantity=quantity,
-        limit_price=fill_price,
+        limit_price=executed_fill_price,
         status="FILLED",
-        simulated_fill_source=str(payload.get("simulated_fill_source") or "PAPER_SIMULATION"),
+        simulated_fill_source=f"{str(payload.get('simulated_fill_source') or 'PAPER_SIMULATION')}:ADVERSE_FILL",
         model_version=payload.get("model_version"),
         strategy_version=payload.get("strategy_version") or "paper-v1",
         created_at=now,
@@ -286,7 +346,7 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
         fill_id=fill_id,
         symbol=symbol,
         quantity=quantity,
-        fill_price=fill_price,
+        fill_price=executed_fill_price,
         simulated_fill_source=order.simulated_fill_source,
         model_version=order.model_version,
         strategy_version=order.strategy_version,
@@ -302,8 +362,8 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
     if side in {"BUY_TO_OPEN", "SELL_TO_OPEN"}:
         if position:
             position.quantity += quantity if side == "BUY_TO_OPEN" else -quantity
-            position.current_price = fill_price
-            position.market_value = abs(position.quantity) * fill_price * 100.0
+            position.current_price = intended_fill_price
+            position.market_value = abs(position.quantity) * intended_fill_price * 100.0
             position.updated_at = now
         else:
             position = PaperPosition(
@@ -314,25 +374,33 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
                 contract_symbol=payload.get("contract_symbol"),
                 direction="LONG" if side == "BUY_TO_OPEN" else "SHORT",
                 quantity=quantity,
-                entry_price=fill_price,
-                current_price=fill_price,
+                entry_price=executed_fill_price,
+                current_price=intended_fill_price,
                 cost_basis=notional,
-                market_value=notional,
+                market_value=quantity * intended_fill_price * 100.0,
                 status="OPEN",
                 simulated_fill_source=order.simulated_fill_source,
                 model_version=order.model_version,
                 strategy_version=order.strategy_version,
                 opened_at=now,
                 updated_at=now,
-                payload_json=json.dumps({**payload, "exit_plan": exit_plan}, sort_keys=True, default=str),
+                payload_json=json.dumps({
+                    **payload,
+                    "exit_plan": exit_plan,
+                    "intended_fill_price": intended_fill_price,
+                    "executed_fill_price": executed_fill_price,
+                    "adverse_fill_penalty_pct": fill_assumption["adverse_fill_penalty_pct"],
+                    "net_expected_value_pct": fill_assumption["net_expected_value_pct"],
+                    "fill_quality": "CONSERVATIVE_ADVERSE_ASSUMPTION",
+                }, sort_keys=True, default=str),
             )
             db.add(position)
     elif position:
         if exit_plan and not position.payload_json:
             position.payload_json = json.dumps({"exit_plan": exit_plan}, sort_keys=True)
         position.quantity = max(0.0, position.quantity - quantity)
-        position.current_price = fill_price
-        position.market_value = position.quantity * fill_price * 100.0
+        position.current_price = executed_fill_price
+        position.market_value = position.quantity * executed_fill_price * 100.0
         position.updated_at = now
         if position.quantity <= 0:
             position.status = "CLOSED"
@@ -343,7 +411,29 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
         paper_portfolio_id=portfolio.id,
         event_type="PAPER_ORDER_FILLED",
         recommendation_id=recommendation_id,
-        details_json=json.dumps({"order_id": order_id, "fill_id": fill_id, "symbol": symbol, "side": side, "quantity": quantity, "fill_price": fill_price, "created_by": username}),
+        details_json=json.dumps({
+            "order_id": order_id,
+            "fill_id": fill_id,
+            "symbol": symbol,
+            "side": side,
+            "quantity": quantity,
+            "intended_fill_price": intended_fill_price,
+            "executed_fill_price": executed_fill_price,
+            "adverse_fill_penalty_pct": fill_assumption["adverse_fill_penalty_pct"],
+            "expected_value_pct": fill_assumption["expected_value_pct"],
+            "net_expected_value_pct": fill_assumption["net_expected_value_pct"],
+            "created_by": username,
+        }),
     ))
     db.commit()
-    return {"ok": True, "order_id": order_id, "fill_id": fill_id, "source": "paper_tables_only"}
+    return {
+        "ok": True,
+        "order_id": order_id,
+        "fill_id": fill_id,
+        "source": "paper_tables_only",
+        "intended_fill_price": intended_fill_price,
+        "executed_fill_price": executed_fill_price,
+        "adverse_fill_penalty_pct": fill_assumption["adverse_fill_penalty_pct"],
+        "net_expected_value_pct": fill_assumption["net_expected_value_pct"],
+        "fill_quality": "CONSERVATIVE_ADVERSE_ASSUMPTION",
+    }

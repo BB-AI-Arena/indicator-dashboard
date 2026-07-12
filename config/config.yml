@@ -101,6 +101,9 @@ decision_dashboard:
   min_historical_examples: 10
   min_reward_to_risk: 1.5
   min_expected_value_pct: 0.01
+  adverse_fill_penalty_pct: 5
+  require_expected_value_after_adverse_fill: true
+  minimum_expected_value_after_adverse_fill_pct: 0.25
   max_cards:
     next_best: 3
     forming: 6
@@ -367,6 +370,9 @@ paper_portfolio:
   profit_trail_pct: 5
   trailing_mode: HYBRID
   management_timeframe: 5m
+  adverse_fill_penalty_pct: 5
+  require_positive_ev_after_adverse_fill: true
+  minimum_expected_value_after_adverse_fill_pct: 0.25
   max_profit_giveback_pct: 5
   partial_target_1_fraction: 0.33
   stop_execution_mode: CONSERVATIVE_STOP_MARKET

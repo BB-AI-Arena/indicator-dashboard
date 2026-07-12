@@ -108,6 +108,7 @@ export default function PaperPortfolio() {
               <div key={position.position_id} className="rounded border border-slate-700 bg-panel2 p-3 text-sm">
                 <div className="flex justify-between"><strong>{position.display_symbol || position.symbol}</strong><span>{position.direction}</span></div>
                 <p className="mt-2">Quantity: {position.quantity} • Entry: {money(position.entry_option_price)} • Current: {money(position.current_price)}</p>
+                {position.fill_quality && <p className="mt-1 text-xs text-amber-200">Fill assumption: {position.fill_quality.replaceAll('_', ' ')} ({position.adverse_fill_penalty_pct ?? 5}% adverse) · intended {money(position.intended_fill_price)} → executed {money(position.executed_fill_price)}</p>}
                 <p>Cost basis: {money(position.cost_basis)} • Market value: {money(position.market_value)}</p>
                 <p className="mt-1 text-xs text-slate-500">Source: {position.simulated_fill_source || 'PAPER_SIMULATION'} • Recommendation: {position.recommendation_id || '-'}</p>
                 <ExitManagementPanel position={position} riskManagement={riskByPosition[position.position_id]} />
