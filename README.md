@@ -52,7 +52,8 @@ The result is a practical research and trade-management workspace for traders wh
 - Not a source of guaranteed real-time data.
 - Not financial, tax, or investment advice.
 
-Use the output as a structured research layer, not as a standalone trade signal.
+Use `ACTIVE SIGNALS` for time-bounded deterministic signal output. The system still does not
+place brokerage orders automatically, and a signal is removed as soon as its validity gates fail.
 
 ## Architecture
 
@@ -813,6 +814,31 @@ Check the `warnings`, `filtered_counts`, and `filtered_out_count` fields from `/
 - Use the candle cache worker status endpoint for live cache warming: `/api/cache/candles/status`.
 - Consider Twelve Data for candles if Yahoo is unreliable.
 
+## Active Signals
+
+`ACTIVE SIGNALS` is the live signal surface for currently actionable options setups. It
+publishes only deterministic setups that have an exact entry condition, invalidation, targets,
+reward-to-risk, current data, and an acceptable contract. Signals are time-bounded around the
+next 15 minutes by default and are revalidated by the server worker every three minutes during
+the actionable options session.
+
+Signals that expire, invalidate, reach a target, become stale, lose VWAP or volume confirmation,
+or fail contract-quality gates are removed from the active view and retained in Signal History.
+AI is a final validation layer when enabled; it cannot create a setup or override deterministic
+hard gates. Paper opening trades require a matching `TRIGGERED` or `ACTIVE` signal and its maximum
+premium limit. Closed-session data is planning data and does not create new executable intraday
+signals.
+
+API routes:
+
+```text
+/api/signals/active
+/api/signals/refresh
+/api/signals/{signal_id}/trigger
+/api/signals/history
+/api/signals/status
+```
+
 ## Roadmap
 
 High-value next improvements:
@@ -824,6 +850,9 @@ High-value next improvements:
 - Add configurable risk sizing and max premium-at-risk displays.
 - Add tests around provider normalization and option filtering.
 
-## Disclaimer
+## Risk
 
-Trading options involves substantial risk and can result in total loss of premium or more depending on strategy. This software is an analytical dashboard only. Validate all data and decisions independently before trading.
+Trading options involves substantial risk and can result in total loss of premium or more
+depending on strategy. Active Signals are time-bounded system outputs, not guarantees of
+execution or outcome. Brokerage positions remain read-only unless a separate execution feature
+is explicitly enabled; paper trades remain isolated from E*TRADE data.

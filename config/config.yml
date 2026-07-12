@@ -108,6 +108,14 @@ decision_dashboard:
     next_best: 3
     forming: 6
 
+active_signals:
+  enabled: true
+  active_interval_seconds: 180
+  closed_interval_seconds: 1800
+  default_valid_minutes: 15
+  maximum_chase_underlying_pct: 0.75
+  require_ai_validation: false
+
 profile_completeness:
   profile_version: ticker-profile-v2
   live_quote_max_age_seconds: 120

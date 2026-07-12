@@ -33,6 +33,9 @@ def ensure_paper_schema() -> None:
     additions = {
         "paper_position_risk_states": {"paper_portfolio_id": "INTEGER"},
         "paper_risk_audit_events": {"paper_portfolio_id": "INTEGER"},
+        "paper_positions": {"signal_id": "VARCHAR(128)"},
+        "paper_orders": {"signal_id": "VARCHAR(128)"},
+        "paper_fills": {"signal_id": "VARCHAR(128)"},
         "brokerage_accounts": {
             "account_equity": "FLOAT",
             "cash_balance": "FLOAT",
@@ -185,6 +188,7 @@ def _position_payload(row: PaperPosition) -> dict[str, Any]:
         "paper_position_id": row.id,
         "paper_portfolio_id": row.paper_portfolio_id,
         "recommendation_id": row.recommendation_id,
+        "signal_id": row.signal_id,
         "symbol": row.symbol,
         "display_symbol": row.contract_symbol or row.symbol,
         "contract_symbol": row.contract_symbol,
@@ -211,6 +215,7 @@ def _serialize_order(row: PaperOrder) -> dict[str, Any]:
         "id": row.id,
         "paper_portfolio_id": row.paper_portfolio_id,
         "recommendation_id": row.recommendation_id,
+        "signal_id": row.signal_id,
         "order_id": row.order_id,
         "symbol": row.symbol,
         "contract_symbol": row.contract_symbol,
@@ -277,8 +282,8 @@ def get_paper_portfolio(db: Session, market_session: dict[str, Any] | None = Non
         },
         "positions": payload_positions,
         "orders": [_serialize_order(row) for row in orders],
-        "fills": [{"fill_id": row.fill_id, "order_id": row.order_id, "symbol": row.symbol, "quantity": row.quantity, "fill_price": row.fill_price, "created_at": row.created_at, "simulated_fill_source": row.simulated_fill_source} for row in fills],
-        "trade_history": [{"order_id": row.order_id, "symbol": row.symbol, "side": row.side, "quantity": row.quantity, "limit_price": row.limit_price, "status": row.status, "created_at": row.created_at} for row in orders],
+        "fills": [{"fill_id": row.fill_id, "order_id": row.order_id, "signal_id": row.signal_id, "symbol": row.symbol, "quantity": row.quantity, "fill_price": row.fill_price, "created_at": row.created_at, "simulated_fill_source": row.simulated_fill_source} for row in fills],
+        "trade_history": [{"order_id": row.order_id, "signal_id": row.signal_id, "symbol": row.symbol, "side": row.side, "quantity": row.quantity, "limit_price": row.limit_price, "status": row.status, "created_at": row.created_at} for row in orders],
         "equity_curve": [{"timestamp": row.created_at, "equity": row.equity, "cash": row.cash, "realized_pnl": row.realized_pnl, "unrealized_pnl": row.unrealized_pnl} for row in reversed(curve_rows)],
         "paper_risk": paper_risk,
         "recommendation_performance": performance,
@@ -306,6 +311,12 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
     side = str(payload.get("side") or "BUY_TO_OPEN").upper()
     if side not in {"BUY_TO_OPEN", "SELL_TO_OPEN", "SELL_TO_CLOSE", "BUY_TO_CLOSE"}:
         raise ValueError("unsupported paper order side")
+    signal_id = str(payload.get("signal_id") or "").strip() or None
+    if side in {"BUY_TO_OPEN", "SELL_TO_OPEN"}:
+        if not signal_id:
+            raise ValueError("opening paper trades must originate from a valid TRIGGERED active signal")
+        from .active_signals import validate_signal_for_paper_entry
+        validate_signal_for_paper_entry(db, signal_id, payload)
     fill_assumption = _require_expected_value_after_adverse_fill(payload, recommendation) if side in {"BUY_TO_OPEN", "SELL_TO_OPEN"} else {"expected_value_pct": _safe_float(payload.get("expected_value_after_costs_pct")), "adverse_fill_penalty_pct": adverse_fill_penalty_pct(), "net_expected_value_pct": None}
     executed_fill_price = adverse_fill_price(intended_fill_price, side, fill_assumption["adverse_fill_penalty_pct"])
     exit_plan = payload.get("exit_plan")
@@ -327,6 +338,7 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
     order = PaperOrder(
         paper_portfolio_id=portfolio.id,
         recommendation_id=recommendation_id,
+        signal_id=signal_id,
         order_id=order_id,
         symbol=symbol,
         contract_symbol=payload.get("contract_symbol"),
@@ -342,6 +354,7 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
     fill = PaperFill(
         paper_portfolio_id=portfolio.id,
         recommendation_id=recommendation_id,
+        signal_id=signal_id,
         order_id=order_id,
         fill_id=fill_id,
         symbol=symbol,
@@ -369,6 +382,7 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
             position = PaperPosition(
                 paper_portfolio_id=portfolio.id,
                 recommendation_id=recommendation_id,
+                signal_id=signal_id,
                 position_key=position_key,
                 symbol=symbol,
                 contract_symbol=payload.get("contract_symbol"),

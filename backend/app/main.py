@@ -16,6 +16,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .advisory import build_advisory_package, generate_advisory, get_advisory_settings, update_advisory_settings
+from .active_signals import ensure_active_signal_schema, get_active_signals, get_signal_history, reconcile_signals, signal_worker_status, start_if_enabled as start_active_signal_worker, stop as stop_active_signal_worker, trigger_signal
 from .ai_validator import validate_trade_gate
 from .auth import etrade_auth
 from .backtest import backtest_setup
@@ -82,6 +83,7 @@ from .schemas import HealthResponse, WatchlistAddRequest
 
 
 Base.metadata.create_all(bind=engine)
+ensure_active_signal_schema()
 ensure_social_schema()
 ensure_paper_schema()
 ensure_profile_schema()
@@ -580,6 +582,7 @@ async def startup_event():
         with contextlib.suppress(Exception):
             get_open_option_positions(refresh=True, market_session=get_market_session())
     start_option_estimation_worker()
+    start_active_signal_worker()
     return
 
 
@@ -629,6 +632,7 @@ async def _refresh_missing_earnings_profiles() -> None:
 async def shutdown_event():
     await stop_candle_worker()
     await stop_option_estimation_worker()
+    await stop_active_signal_worker()
     return
 
 
@@ -1464,6 +1468,39 @@ def get_watchlist(db: Session = Depends(get_db)):
 @app.get("/api/dashboard/decision")
 def dashboard_decision(db: Session = Depends(get_db)):
     return build_decision_dashboard(db)
+
+
+@app.get("/api/signals/active")
+def active_signals(request: Request, refresh: bool = False, db: Session = Depends(get_db)):
+    _request_auth(request)
+    return get_active_signals(db, refresh=refresh)
+
+
+@app.post("/api/signals/refresh")
+def refresh_active_signals(request: Request, db: Session = Depends(get_db)):
+    _request_auth(request)
+    return {"status": "ok", **reconcile_signals(db)}
+
+
+@app.post("/api/signals/{signal_id}/trigger")
+def confirm_active_signal(signal_id: str, request: Request, payload: dict[str, Any] | None = None, db: Session = Depends(get_db)):
+    _request_auth(request)
+    try:
+        return trigger_signal(db, signal_id, payload or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/signals/history")
+def signal_history(request: Request, limit: int = 100, db: Session = Depends(get_db)):
+    _request_auth(request)
+    return get_signal_history(db, limit=limit)
+
+
+@app.get("/api/signals/status")
+def active_signal_status(request: Request):
+    _request_auth(request)
+    return signal_worker_status()
 
 
 @app.get("/api/recommendations/performance")

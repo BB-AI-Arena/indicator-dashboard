@@ -119,6 +119,66 @@ class RecommendationEvent(Base):
     created_by = Column(String(64), nullable=True)
 
 
+class TradingSignal(Base):
+    """Persisted deterministic signal with a mutable state and immutable events."""
+
+    __tablename__ = "trading_signals"
+    __table_args__ = (
+        UniqueConstraint("signal_id", name="uq_trading_signals_signal_id"),
+        Index("ix_trading_signals_active_lookup", "symbol", "direction", "state", "valid_until"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    signal_id = Column(String(128), nullable=False, index=True)
+    symbol = Column(String(16), nullable=False, index=True)
+    direction = Column(String(16), nullable=False, index=True)
+    setup_type = Column(String(128), nullable=False, index=True)
+    state = Column(String(32), nullable=False, index=True)
+    confidence = Column(String(16), nullable=True)
+    score = Column(Float, nullable=True)
+    created_at = Column(String(64), nullable=False, index=True)
+    valid_from = Column(String(64), nullable=False)
+    valid_until = Column(String(64), nullable=False, index=True)
+    last_validated_at = Column(String(64), nullable=False)
+    next_validation_at = Column(String(64), nullable=False)
+    setup_timeframe = Column(String(16), nullable=False, default="15m")
+    execution_timeframe = Column(String(16), nullable=False, default="5m")
+    expected_holding_window = Column(String(64), nullable=False, default="NEXT 15 MINUTES")
+    current_price = Column(Float, nullable=True)
+    entry_json = Column(Text, nullable=False, default="{}")
+    invalidation_json = Column(Text, nullable=False, default="{}")
+    targets_json = Column(Text, nullable=False, default="[]")
+    contract_json = Column(Text, nullable=False, default="{}")
+    deterministic_json = Column(Text, nullable=False, default="{}")
+    ai_validation_json = Column(Text, nullable=False, default="{}")
+    freshness_json = Column(Text, nullable=False, default="{}")
+    payload_json = Column(Text, nullable=False, default="{}")
+    outcome_json = Column(Text, nullable=False, default="{}")
+    removal_reason = Column(String(128), nullable=True)
+    triggered_at = Column(String(64), nullable=True)
+    target_reached_at = Column(String(64), nullable=True)
+    paper_recommendation_id = Column(String(96), nullable=True, index=True)
+    model_version = Column(String(64), nullable=True)
+    strategy_version = Column(String(64), nullable=False, default="active-signal-v1")
+    updated_at = Column(String(64), nullable=False)
+
+
+class SignalEvent(Base):
+    """Append-only state transition and removal audit for a trading signal."""
+
+    __tablename__ = "signal_events"
+    __table_args__ = (Index("ix_signal_events_signal_created_at", "signal_id", "created_at"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    signal_id = Column(String(128), nullable=False, index=True)
+    event_type = Column(String(64), nullable=False)
+    from_state = Column(String(32), nullable=True)
+    to_state = Column(String(32), nullable=True)
+    reason = Column(String(256), nullable=True)
+    payload_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class Candle(Base):
     __tablename__ = "candles"
     __table_args__ = (
@@ -554,6 +614,7 @@ class PaperPosition(Base):
     id = Column(Integer, primary_key=True, index=True)
     paper_portfolio_id = Column(Integer, ForeignKey("paper_portfolios.id"), nullable=False, index=True)
     recommendation_id = Column(String(96), nullable=True, index=True)
+    signal_id = Column(String(128), nullable=True, index=True)
     position_key = Column(String(160), nullable=False)
     symbol = Column(String(16), nullable=False, index=True)
     contract_symbol = Column(String(160), nullable=True)
@@ -582,6 +643,7 @@ class PaperOrder(Base):
     id = Column(Integer, primary_key=True, index=True)
     paper_portfolio_id = Column(Integer, ForeignKey("paper_portfolios.id"), nullable=False, index=True)
     recommendation_id = Column(String(96), nullable=True, index=True)
+    signal_id = Column(String(128), nullable=True, index=True)
     order_id = Column(String(160), nullable=False, unique=True)
     symbol = Column(String(16), nullable=False)
     contract_symbol = Column(String(160), nullable=True)
@@ -602,6 +664,7 @@ class PaperFill(Base):
     id = Column(Integer, primary_key=True, index=True)
     paper_portfolio_id = Column(Integer, ForeignKey("paper_portfolios.id"), nullable=False, index=True)
     recommendation_id = Column(String(96), nullable=True, index=True)
+    signal_id = Column(String(128), nullable=True, index=True)
     order_id = Column(String(160), nullable=False, index=True)
     fill_id = Column(String(160), nullable=False, unique=True)
     symbol = Column(String(16), nullable=False)

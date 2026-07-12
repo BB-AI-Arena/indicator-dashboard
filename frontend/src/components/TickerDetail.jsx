@@ -304,7 +304,7 @@ export default function TickerDetail({ symbol, onSymbolChange, marketSession, cu
         <div className="card p-4 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-lg font-semibold">Social Narrative</h3>
-            <span className="badge border border-slate-700 bg-slate-900/40 text-slate-300">Supporting signal only</span>
+            <span className="badge border border-slate-700 bg-slate-900/40 text-slate-300">Secondary validator</span>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <div><span className="text-slate-400">Sentiment</span><p className="font-semibold">{profile.stats.social_history.classification || 'INSUFFICIENT DATA'}</p></div>

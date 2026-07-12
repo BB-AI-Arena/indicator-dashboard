@@ -517,7 +517,7 @@ def _aggregate(symbol: str, db, cfg: dict[str, Any]) -> dict[str, Any]:
         "spam_risk_score": spam_risk,
         "price_confirmation": price_confirmation,
         "options_confirmation": "UNAVAILABLE",
-        "trade_impact": "SUPPORTING SIGNAL ONLY",
+        "trade_impact": "SECONDARY VALIDATOR",
         "historical_behavior": historical,
         "representative_posts": representative,
         "window": {"start": start, "end": now.isoformat(), "session": "CURRENT_OR_NEXT_SESSION_PLANNING"},

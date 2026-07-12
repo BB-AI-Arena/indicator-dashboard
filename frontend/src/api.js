@@ -104,6 +104,13 @@ export const api = {
   authUnblockIp: (ip) => request(`/api/auth/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE' }),
   config: () => request('/api/config'),
   decisionDashboard: () => request('/api/dashboard/decision', { timeoutMs: 10000 }),
+  activeSignals: (refresh = false) => request(`/api/signals/active${refresh ? '?refresh=true' : ''}`, { timeoutMs: 20000 }),
+  refreshActiveSignals: () => request('/api/signals/refresh', { method: 'POST', timeoutMs: 30000 }),
+  triggerActiveSignal: (signalId, payload = {}) => request(`/api/signals/${encodeURIComponent(signalId)}/trigger`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeoutMs: 15000,
+  }),
+  signalHistory: (limit = 100) => request(`/api/signals/history?limit=${encodeURIComponent(limit)}`, { timeoutMs: 15000 }),
+  activeSignalStatus: () => request('/api/signals/status', { timeoutMs: 10000 }),
   recommendationPerformance: () => request('/api/recommendations/performance', { timeoutMs: 10000 }),
   recommendations: (limit = 100) => request(`/api/recommendations?limit=${encodeURIComponent(limit)}`, { timeoutMs: 10000 }),
   triggerRecommendation: (id, payload = {}) => request(`/api/recommendations/${encodeURIComponent(id)}/trigger`, {

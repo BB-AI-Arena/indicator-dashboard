@@ -13,6 +13,7 @@ import PaperPortfolio from './components/PaperPortfolio'
 import MorningSetup from './components/MorningSetup'
 import TradeReview from './components/TradeReview'
 import WatchlistIntelligence from './components/WatchlistIntelligence'
+import ActiveSignals from './components/ActiveSignals'
 
 function brokerStatusLabel(status, error) {
   if (error) return 'Status check failed'
@@ -176,8 +177,8 @@ export default function App() {
   }
 
   const tabs = auth.user?.role === 'admin'
-    ? ['Dashboard', 'Watchlist Intelligence', 'Ticker Detail', 'E*TRADE Positions', 'Trade Review', 'Paper Portfolio', 'Morning Setup', 'Admin', 'Alerts']
-    : ['Dashboard', 'Watchlist Intelligence', 'Ticker Detail', 'Alerts', 'Settings']
+    ? ['Dashboard', 'ACTIVE SIGNALS', 'Watchlist Intelligence', 'Ticker Detail', 'E*TRADE Positions', 'Trade Review', 'Paper Portfolio', 'Morning Setup', 'Admin', 'Alerts']
+    : ['Dashboard', 'ACTIVE SIGNALS', 'Watchlist Intelligence', 'Ticker Detail', 'Alerts', 'Settings']
 
   const isAdmin = auth.user?.role === 'admin'
   const showEtradeAlert = isAdmin && (Boolean(etradeStatusError) || (etradeStatus && (!etradeStatus.enabled || !etradeStatus.configured || !etradeStatus.connected)))
@@ -272,6 +273,7 @@ export default function App() {
         </header>
 
         {activeTab === 'Dashboard' && <Dashboard onSelectSymbol={(s) => { setSelectedSymbol(s); setActiveTab('Ticker Detail') }} currentUser={auth.user} marketSession={marketSession} />}
+        {activeTab === 'ACTIVE SIGNALS' && <ActiveSignals />}
         {activeTab === 'Watchlist Intelligence' && <WatchlistIntelligence onSelectSymbol={(s) => { setSelectedSymbol(s); setActiveTab('Ticker Detail') }} />}
         {activeTab === 'Ticker Detail' && <TickerDetail symbol={selectedSymbol} onSymbolChange={setSelectedSymbol} marketSession={marketSession} currentUser={auth.user} />}
         {activeTab === 'E*TRADE Positions' && auth.user?.role === 'admin' && <EtradePositions currentUser={auth.user} marketSession={marketSession} />}
