@@ -10,6 +10,7 @@ import EarningsTicker from './components/EarningsTicker'
 import LoginPage from './components/LoginPage'
 import EtradePositions from './components/EtradePositions'
 import PaperPortfolio from './components/PaperPortfolio'
+import MorningSetup from './components/MorningSetup'
 import TradeReview from './components/TradeReview'
 import WatchlistIntelligence from './components/WatchlistIntelligence'
 
@@ -175,7 +176,7 @@ export default function App() {
   }
 
   const tabs = auth.user?.role === 'admin'
-    ? ['Dashboard', 'Watchlist Intelligence', 'Ticker Detail', 'E*TRADE Positions', 'Trade Review', 'Paper Portfolio', 'Admin', 'Alerts']
+    ? ['Dashboard', 'Watchlist Intelligence', 'Ticker Detail', 'E*TRADE Positions', 'Trade Review', 'Paper Portfolio', 'Morning Setup', 'Admin', 'Alerts']
     : ['Dashboard', 'Watchlist Intelligence', 'Ticker Detail', 'Alerts', 'Settings']
 
   const isAdmin = auth.user?.role === 'admin'
@@ -275,6 +276,7 @@ export default function App() {
         {activeTab === 'Ticker Detail' && <TickerDetail symbol={selectedSymbol} onSymbolChange={setSelectedSymbol} marketSession={marketSession} currentUser={auth.user} />}
         {activeTab === 'E*TRADE Positions' && auth.user?.role === 'admin' && <EtradePositions currentUser={auth.user} marketSession={marketSession} />}
         {activeTab === 'Paper Portfolio' && auth.user?.role === 'admin' && <PaperPortfolio />}
+        {activeTab === 'Morning Setup' && auth.user?.role === 'admin' && <MorningSetup />}
         {activeTab === 'Trade Review' && auth.user?.role === 'admin' && <TradeReview currentUser={auth.user} />}
         {activeTab === 'Alerts' && <Alerts />}
         {activeTab === 'Admin' && auth.user?.role === 'admin' && <Settings currentUser={auth.user} />}
