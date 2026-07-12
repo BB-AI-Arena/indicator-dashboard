@@ -16,7 +16,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .advisory import build_advisory_package, generate_advisory, get_advisory_settings, update_advisory_settings
-from .active_signals import ensure_active_signal_schema, get_active_signals, get_signal_history, reconcile_signals, signal_worker_status, start_if_enabled as start_active_signal_worker, stop as stop_active_signal_worker, trigger_signal
+from .active_signals import ensure_active_signal_schema, get_active_signals, get_signal_history, record_signal_outcome, reconcile_signals, signal_worker_status, start_if_enabled as start_active_signal_worker, stop as stop_active_signal_worker, trigger_signal
 from .ai_validator import validate_trade_gate
 from .auth import etrade_auth
 from .backtest import backtest_setup
@@ -1495,6 +1495,15 @@ def confirm_active_signal(signal_id: str, request: Request, payload: dict[str, A
 def signal_history(request: Request, limit: int = 100, db: Session = Depends(get_db)):
     _request_auth(request)
     return get_signal_history(db, limit=limit)
+
+
+@app.post("/api/signals/{signal_id}/outcome")
+def active_signal_outcome(signal_id: str, request: Request, payload: dict[str, Any] | None = None, db: Session = Depends(get_db)):
+    _request_admin(request)
+    try:
+        return record_signal_outcome(db, signal_id, payload or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/signals/status")

@@ -318,7 +318,7 @@ def _attach_trade_explanation(
     return result
 
 
-def validate_trade_gate(payload: dict[str, Any]) -> dict[str, Any]:
+def validate_trade_gate(payload: dict[str, Any], *, preprompt: str | None = None) -> dict[str, Any]:
     payload = payload or {}
     blockers = _deterministic_blockers(payload)
     if blockers:
@@ -347,7 +347,7 @@ def validate_trade_gate(payload: dict[str, Any]) -> dict[str, Any]:
     request_payload = {
         "model": model,
         "input": [
-            {"role": "system", "content": TRADE_GATE_PREPROMPT},
+            {"role": "system", "content": preprompt or TRADE_GATE_PREPROMPT},
             {
                 "role": "user",
                 "content": json.dumps(
@@ -428,3 +428,58 @@ def validate_trade_gate(payload: dict[str, Any]) -> dict[str, Any]:
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
     return _attach_trade_explanation(result, payload, final_decision="TRADE_CANDIDATE")
+
+
+SIGNAL_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "decision": {"type": "string", "enum": ["APPROVE_SIGNAL", "WAIT_FOR_CONFIRMATION", "WAIT_FOR_RETEST", "REJECT_EXTENDED", "REJECT_LOW_VOLUME", "REJECT_BAD_RISK_REWARD", "REJECT_OPTION_QUALITY", "REJECT_DATA_QUALITY", "INVALIDATED"]},
+        "signal_status": {"type": "string"},
+        "thesis": {"type": "string"},
+        "entry": {"type": "string"},
+        "maximum_chase_price": {"type": "string"},
+        "invalidation": {"type": "string"},
+        "targets": {"type": "array", "items": {"type": "string"}},
+        "option_contract": {"type": "string"},
+        "maximum_option_price": {"type": "string"},
+        "why": {"type": "array", "items": {"type": "string"}},
+        "conflicts": {"type": "array", "items": {"type": "string"}},
+        "expiration_time": {"type": "string"},
+        "next_action": {"type": "string"},
+    },
+    "required": ["decision", "signal_status", "thesis", "entry", "maximum_chase_price", "invalidation", "targets", "option_contract", "maximum_option_price", "why", "conflicts", "expiration_time", "next_action"],
+}
+
+
+def validate_signal(payload: dict[str, Any], *, prompt: str, prompt_version: str) -> dict[str, Any]:
+    """Validate a deterministic signal with a strict signal-shaped Responses result."""
+    ai_cfg = config_manager.get("ai", default={}) or {}
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return {"decision": "REJECT_DATA_QUALITY", "status": "UNAVAILABLE", "source": "configuration", "prompt_version": prompt_version, "reason": "OPENAI_API_KEY is not configured"}
+    model = os.getenv("OPENAI_MODEL", str(ai_cfg.get("model", "gpt-5.6"))).strip() or "gpt-5.6"
+    timeout = int(ai_cfg.get("timeout_seconds", 20) or 20)
+    request_payload = {
+        "model": model,
+        "input": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": json.dumps({"instruction": "Validate the supplied deterministic signal. Do not change any supplied price or create a setup.", "signal": payload}, sort_keys=True)},
+        ],
+        "text": {"format": {"type": "json_schema", "name": "active_signal_validation", "strict": True, "schema": SIGNAL_RESPONSE_SCHEMA}},
+    }
+
+    def _post_openai() -> requests.Response:
+        response = requests.post(OPENAI_RESPONSES_URL, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=request_payload, timeout=timeout)
+        response.raise_for_status()
+        return response
+
+    try:
+        response = call_with_rate_limit("openai", str(payload.get("ticker") or ""), "responses/signal-validation", _post_openai)
+        parsed = json.loads(_extract_output_text(response.json()))
+        decision = str(parsed.get("decision") or "REJECT_DATA_QUALITY").upper()
+        if decision not in set(SIGNAL_RESPONSE_SCHEMA["properties"]["decision"]["enum"]):
+            return {"decision": "REJECT_DATA_QUALITY", "status": "REJECTED", "source": "openai", "prompt_version": prompt_version, "reason": "AI returned an unsupported decision"}
+        return {**parsed, "decision": decision, "status": "VALIDATED" if decision == "APPROVE_SIGNAL" else "REJECTED", "source": "openai_responses", "model": model, "prompt_version": prompt_version, "checked_at": datetime.now(timezone.utc).isoformat()}
+    except Exception as exc:
+        return {"decision": "REJECT_DATA_QUALITY", "status": "UNAVAILABLE", "source": "openai_responses", "prompt_version": prompt_version, "reason": f"AI signal validation failed: {exc}", "checked_at": datetime.now(timezone.utc).isoformat()}

@@ -110,6 +110,9 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeoutMs: 15000,
   }),
   signalHistory: (limit = 100) => request(`/api/signals/history?limit=${encodeURIComponent(limit)}`, { timeoutMs: 15000 }),
+  signalOutcome: (signalId, payload = {}) => request(`/api/signals/${encodeURIComponent(signalId)}/outcome`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeoutMs: 15000,
+  }),
   activeSignalStatus: () => request('/api/signals/status', { timeoutMs: 10000 }),
   recommendationPerformance: () => request('/api/recommendations/performance', { timeoutMs: 10000 }),
   recommendations: (limit = 100) => request(`/api/recommendations?limit=${encodeURIComponent(limit)}`, { timeoutMs: 10000 }),

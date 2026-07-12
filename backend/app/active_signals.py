@@ -46,7 +46,14 @@ TERMINAL_SIGNAL_STATES = {
 }
 SIGNAL_VERSION = "active-signal-v1"
 AI_SIGNAL_VALIDATOR_PROMPT_VERSION = "active-signal-validator-v1"
-AI_SIGNAL_VALIDATOR_PROMPT = """You are validating a deterministic options trading signal. The setup has already been detected by the analytics engine. Do not invent a setup or alter supplied prices, targets, invalidation, contract data, or probabilities. Evaluate price structure, VWAP, volume, key levels, reward-to-risk, entry quality, chase risk, historical evidence, market and sector alignment, option liquidity, option pricing, and data freshness. Return APPROVE_SIGNAL only when the supplied deterministic facts are coherent; otherwise return WAIT_FOR_CONFIRMATION, WAIT_FOR_RETEST, REJECT_EXTENDED, REJECT_LOW_VOLUME, REJECT_BAD_RISK_REWARD, REJECT_OPTION_QUALITY, REJECT_DATA_QUALITY, or INVALIDATED."""
+AI_SIGNAL_VALIDATOR_PROMPT = """You are validating a deterministic options trading signal.
+
+The setup has already been detected by the analytics engine. Do not invent a setup or alter supplied prices, targets, invalidation, contract data, or probabilities. Evaluate price structure, VWAP, volume, key levels, reward-to-risk, entry quality, chase risk, historical setup performance, market regime, sector alignment, option liquidity, option pricing, and data freshness.
+
+Return APPROVE_SIGNAL only when the supplied deterministic facts are coherent. Otherwise return WAIT_FOR_CONFIRMATION, WAIT_FOR_RETEST, REJECT_EXTENDED, REJECT_LOW_VOLUME, REJECT_BAD_RISK_REWARD, REJECT_OPTION_QUALITY, REJECT_DATA_QUALITY, or INVALIDATED.
+
+Return structured fields: DECISION, SIGNAL_STATUS, THESIS, ENTRY, MAXIMUM_CHASE_PRICE, INVALIDATION, TARGETS, OPTION_CONTRACT, MAXIMUM_OPTION_PRICE, WHY, CONFLICTS, EXPIRATION_TIME, and NEXT_ACTION. Cite the supplied deterministic values exactly. Never create a new setup or recommend a contract that is not supplied."""
+_last_market_state: dict[str, Any] = {}
 
 
 def _cfg() -> dict[str, Any]:
@@ -88,6 +95,10 @@ def _setup_type(candidate: dict[str, Any]) -> str | None:
     side = str(candidate.get("direction") or "").upper()
     if not name or side not in {"LONG", "SHORT"}:
         return None
+    if "opening range" in name:
+        return "OPENING-RANGE BREAKOUT" if side == "LONG" else "OPENING-RANGE BREAKDOWN"
+    if "reversal" in name or "major level" in name:
+        return "REVERSAL FROM MAJOR LEVEL"
     if "vwap" in name and ("reclaim" in name or "continu" in name):
         return "VWAP RECLAIM LONG" if side == "LONG" else "VWAP REJECTION SHORT"
     if "vwap" in name and ("reject" in name or "resist" in name):
@@ -112,15 +123,13 @@ def _setup_type(candidate: dict[str, Any]) -> str | None:
         return "PULLBACK CONTINUATION"
     if "flag" in name:
         return "BULL FLAG CONTINUATION" if side == "LONG" else "BEAR FLAG CONTINUATION"
-    if "opening range" in name:
-        return "OPENING-RANGE BREAKOUT" if side == "LONG" else "OPENING-RANGE BREAKDOWN"
     if "momentum" in name or "continuation" in name:
         return "MOMENTUM CONTINUATION"
     return None
 
 
 def _ai_validation(candidate: dict[str, Any]) -> dict[str, Any]:
-    """Keep the publish path deterministic; optional AI validation is explicit and auditable."""
+    """Run the final AI gate without allowing it to create or reshape a setup."""
     enabled = bool(_cfg().get("require_ai_validation", False))
     if not enabled:
         return {
@@ -130,15 +139,89 @@ def _ai_validation(candidate: dict[str, Any]) -> dict[str, Any]:
             "prompt_version": AI_SIGNAL_VALIDATOR_PROMPT_VERSION,
             "reason": "AI validation is disabled; deterministic gates remain authoritative.",
         }
-    # A future network validator can populate this field without changing the
-    # lifecycle contract. Missing AI output never invents or promotes a setup.
-    return {
-        "decision": "WAIT_FOR_CONFIRMATION",
-        "status": "UNAVAILABLE",
-        "source": "configuration",
-        "prompt_version": AI_SIGNAL_VALIDATOR_PROMPT_VERSION,
-        "reason": "AI validation is required but no validated response is available.",
+    cached = candidate.get("_active_signal_ai_validation")
+    if isinstance(cached, dict):
+        return cached
+    contract = dict(candidate.get("preferred_option_contract") or {})
+    history = candidate.get("historical_match") or {}
+    rate = _float(history.get("raw_hit_rate") if history.get("raw_hit_rate") is not None else history.get("raw_success_rate"))
+    if rate is not None and rate <= 1:
+        rate *= 100
+    contract_type = str(contract.get("type") or "").upper()
+    # Every field below is either supplied by the deterministic candidate or a
+    # direct structural translation. Missing provider values remain missing and
+    # therefore fail the validator instead of being fabricated.
+    positioning = dict(candidate.get("options_positioning") or {})
+    if positioning:
+        positioning.setdefault("bias", positioning.get("positioning_bias") or positioning.get("classification"))
+    gate_payload = {
+        "symbol": candidate.get("ticker"),
+        "side": candidate.get("direction"),
+        "scan": {
+            "symbol": candidate.get("ticker"),
+            "side": candidate.get("direction"),
+            "grade": "HIGH_CONVICTION" if str(candidate.get("conviction") or "").upper() in {"HIGH", "VERY HIGH"} else "TRADE_CANDIDATE",
+            "price": candidate.get("current_or_previous_session_price"),
+        },
+        "contract": {
+            **contract,
+            "type": contract_type,
+            "underlying_price": candidate.get("current_or_previous_session_price"),
+            "chart_signal_confirmed": all((candidate.get("evidence_groups") or {}).get(key, {}).get("score") == 1 for key in ("price_structure", "vwap_control", "volume_participation")),
+            "recommendation_eligible": bool(contract.get("recommendation_eligible", False)),
+            "quote_stale": bool(contract.get("quote_stale", True)),
+            "quote_type": contract.get("quote_type"),
+        },
+        "backtest": {
+            "win_rate_pct": rate,
+            "occurrences": history.get("sample_size") or history.get("occurrence_count"),
+            "confidence_ok": str(history.get("confidence") or "").upper() not in {"LOW", "INSUFFICIENT", "UNKNOWN"},
+        },
+        "options_sentiment": positioning,
+        "contract_context": {"underlying_price": candidate.get("current_or_previous_session_price")},
+        "indicators": candidate.get("visible_conditions") or {},
     }
+    try:
+        from .ai_validator import validate_signal
+        result = validate_signal(gate_payload, prompt=AI_SIGNAL_VALIDATOR_PROMPT, prompt_version=AI_SIGNAL_VALIDATOR_PROMPT_VERSION)
+        if result.get("decision") == "APPROVE_SIGNAL":
+            response_text = json.dumps(result, sort_keys=True, default=str)
+            required_values = [
+                (candidate.get("entry_trigger") or {}).get("price"),
+                (candidate.get("invalidation") or {}).get("price"),
+                *[((row or {}).get("price")) for row in (candidate.get("targets") or [])[:2]],
+                candidate.get("maximum_acceptable_option_entry"),
+                _chase_price(candidate),
+            ]
+            missing_values = [value for value in required_values if value is not None and not any(token in response_text for token in {str(value), f"{float(value):.2f}"})]
+            contract_name = str(contract.get("contract") or contract.get("contract_symbol") or "").strip()
+            if missing_values or (contract_name and contract_name.upper() not in response_text.upper()):
+                result = {"decision": "REJECT_DATA_QUALITY", "status": "REJECTED", "reason": "AI response did not cite the deterministic signal values exactly", "blocking_factors": ["ai_output_changed_or_omitted_deterministic_fields"]}
+        decision = "APPROVE_SIGNAL" if result.get("decision") == "APPROVE_SIGNAL" else "WAIT_FOR_CONFIRMATION"
+        output = {
+            "decision": decision,
+            "status": result.get("status") or ("VALIDATED" if decision == "APPROVE_SIGNAL" else "REJECTED"),
+            "source": "openai_responses_signal_validator",
+            "prompt_version": AI_SIGNAL_VALIDATOR_PROMPT_VERSION,
+            "summary": result.get("thesis") or result.get("reason"),
+            "why": result.get("why") or [],
+            "conflicts": result.get("conflicts") or [],
+            "blocking_factors": result.get("blocking_factors") or [],
+            "model_output": result,
+            "signal_status": result.get("signal_status"),
+            "checked_at": result.get("checked_at") or now_iso(),
+        }
+    except Exception as exc:
+        output = {
+            "decision": "WAIT_FOR_CONFIRMATION",
+            "status": "UNAVAILABLE",
+            "source": "openai_responses_signal_validator",
+            "prompt_version": AI_SIGNAL_VALIDATOR_PROMPT_VERSION,
+            "reason": f"AI validation failed: {exc}",
+            "checked_at": now_iso(),
+        }
+    candidate["_active_signal_ai_validation"] = output
+    return output
 
 
 def _candidate_is_publishable(candidate: dict[str, Any], session: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -165,10 +248,16 @@ def _candidate_is_publishable(candidate: dict[str, Any], session: dict[str, Any]
         reasons.append("option_contract_missing")
     if candidate.get("maximum_acceptable_option_entry") is None:
         reasons.append("maximum_option_price_missing")
+    current_price = _float(candidate.get("current_or_previous_session_price"))
+    chase_price = _chase_price(candidate)
+    if current_price is not None and chase_price is not None and ((candidate.get("direction") == "LONG" and current_price > chase_price) or (candidate.get("direction") == "SHORT" and current_price < chase_price)):
+        reasons.append("do_not_chase")
     groups = candidate.get("evidence_groups") or {}
     for key in ("price_structure", "vwap_control", "volume_participation"):
         if (groups.get(key) or {}).get("score") != 1:
             reasons.append(f"{key}_not_aligned")
+    if reasons:
+        return False, list(dict.fromkeys(reasons))
     ai = _ai_validation(candidate)
     if ai.get("decision") != "APPROVE_SIGNAL":
         reasons.append("ai_validation_not_approved")
@@ -183,6 +272,46 @@ def _chase_price(candidate: dict[str, Any]) -> float | None:
     anchor = entry or price
     pct = float(_cfg().get("maximum_chase_underlying_pct", 0.75) or 0.75) / 100
     return round(anchor * (1 + pct if candidate.get("direction") == "LONG" else 1 - pct), 2)
+
+
+def _reward_to_risk(candidate: dict[str, Any]) -> float | None:
+    entry = _float((candidate.get("entry_trigger") or {}).get("price"))
+    invalidation = _float((candidate.get("invalidation") or {}).get("price"))
+    target = _float(((candidate.get("targets") or [{}])[0]).get("price"))
+    if entry is None or invalidation is None or target is None:
+        return None
+    risk = abs(entry - invalidation)
+    reward = abs(target - entry)
+    return reward / risk if risk else None
+
+
+def _enrich_contract_from_estimate(db: Session, candidate: dict[str, Any]) -> dict[str, Any]:
+    """Attach cached option quote/estimate fields without making a provider call."""
+    contract = dict(candidate.get("preferred_option_contract") or {})
+    symbol = str(candidate.get("ticker") or "").upper()
+    option_key = str(contract.get("contract") or contract.get("contract_symbol") or contract.get("option_symbol") or "").upper()
+    if not symbol or not option_key:
+        return contract
+    try:
+        from .option_estimation import latest_estimates
+        estimates = latest_estimates(db, symbol=symbol, limit=100).get("estimates") or []
+        exact = next((row for row in estimates if str(row.get("option_symbol") or "").upper() == option_key), None)
+        if exact:
+            aliases = {
+                "last": "last_actual_option_price",
+                "bid": "last_actual_bid",
+                "ask": "last_actual_ask",
+                "midpoint": "last_actual_midpoint",
+                "type": "option_type",
+            }
+            for key in ("last", "bid", "ask", "midpoint", "expiration", "strike", "type", "volume", "open_interest", "implied_volatility", "delta", "gamma", "theta", "vega"):
+                value = exact.get(key) if exact.get(key) not in (None, "") else exact.get(aliases.get(key, ""))
+                if contract.get(key) in (None, "") and value not in (None, ""):
+                    contract[key] = value
+            contract.update({key: exact.get(key) for key in ("quote_state", "baseline_type", "baseline_price", "baseline_timestamp", "estimated_current_value", "estimated_next_open_value", "iv_down_value", "iv_up_value", "calculation_timestamp", "estimate_is_executable") if exact.get(key) is not None})
+    except Exception:
+        pass
+    return contract
 
 
 def _state_for_candidate(candidate: dict[str, Any]) -> str:
@@ -218,6 +347,7 @@ def _serialize(row: TradingSignal, *, include_payload: bool = True) -> dict[str,
         "created_at": row.created_at,
         "valid_from": row.valid_from,
         "valid_until": row.valid_until,
+        "removal_time": row.updated_at if row.state not in ACTIVE_SIGNAL_STATES else None,
         "expected_holding_window": row.expected_holding_window,
         "setup_timeframe": row.setup_timeframe,
         "execution_timeframe": row.execution_timeframe,
@@ -247,7 +377,7 @@ def _create_signal(db: Session, candidate: dict[str, Any], session: dict[str, An
     if not setup:
         raise ValueError("unsupported deterministic setup type")
     valid_until = now + timedelta(minutes=int(_cfg().get("default_valid_minutes", 15) or 15))
-    contract = dict(candidate.get("preferred_option_contract") or {})
+    contract = _enrich_contract_from_estimate(db, candidate)
     contract["maximum_acceptable_premium"] = candidate.get("maximum_acceptable_option_entry")
     payload = {
         "thesis": candidate.get("thesis"),
@@ -260,8 +390,12 @@ def _create_signal(db: Session, candidate: dict[str, Any], session: dict[str, An
         "historical_match": candidate.get("historical_match"),
         "expected_value": candidate.get("expected_value_estimate"),
         "market_session": session,
+        "reward_to_risk": _reward_to_risk(candidate),
     }
     ai = _ai_validation(candidate)
+    entry = dict(candidate.get("entry_trigger") or {})
+    entry["acceptable_zone"] = candidate.get("acceptable_entry_zone") or candidate.get("entry_zone")
+    entry["maximum_chase_price"] = _chase_price(candidate)
     row = TradingSignal(
         signal_id=f"sig-{uuid.uuid4().hex}",
         symbol=candidate["ticker"],
@@ -274,7 +408,7 @@ def _create_signal(db: Session, candidate: dict[str, Any], session: dict[str, An
         last_validated_at=_iso(now), next_validation_at=_iso(now + timedelta(minutes=3)),
         setup_timeframe="15m", execution_timeframe="5m", expected_holding_window="NEXT 15 MINUTES",
         current_price=_float(candidate.get("current_or_previous_session_price")),
-        entry_json=json.dumps(candidate.get("entry_trigger") or {}, sort_keys=True),
+        entry_json=json.dumps(entry, sort_keys=True),
         invalidation_json=json.dumps(candidate.get("invalidation") or {}, sort_keys=True),
         targets_json=json.dumps(candidate.get("targets") or [], sort_keys=True),
         contract_json=json.dumps(contract, sort_keys=True, default=str),
@@ -304,18 +438,30 @@ def _terminal_reason(row: TradingSignal, candidate: dict[str, Any] | None, now: 
         return "INVALIDATED", "current price crossed deterministic invalidation"
     if price is not None and target is not None and ((row.direction == "LONG" and price >= target) or (row.direction == "SHORT" and price <= target)):
         return "TARGET REACHED", "first deterministic target reached"
+    chase = _chase_price(candidate)
+    if price is not None and chase is not None and ((row.direction == "LONG" and price > chase) or (row.direction == "SHORT" and price < chase)):
+        return "DO NOT CHASE", "price moved beyond the maximum entry chase threshold"
+    reward_to_risk = _reward_to_risk(candidate)
+    minimum_rr = float(_cfg().get("minimum_reward_to_risk", 1.5) or 1.5)
+    if reward_to_risk is None or reward_to_risk < minimum_rr:
+        return "REMOVED", f"reward-to-risk fell below {minimum_rr:g}"
     if not candidate.get("passes_hard_gates"):
         return "REMOVED", "; ".join(candidate.get("hard_gates") or ["hard gate failed"])
     if any((candidate.get("evidence_groups") or {}).get(key, {}).get("score") != 1 for key in ("price_structure", "vwap_control", "volume_participation")):
         return "REMOVED", "price, VWAP, and volume no longer agree"
+    if _cfg().get("require_ai_validation", False) and _ai_validation(candidate).get("decision") != "APPROVE_SIGNAL":
+        return "REMOVED", "AI validation identified a contradiction or is unavailable"
     return None
 
 
 def reconcile_signals(db: Session, *, session: dict[str, Any] | None = None, now: datetime | None = None) -> dict[str, Any]:
+    global _last_market_state
     session = session or get_market_session()
     now = now or datetime.now(timezone.utc)
     rows = db.query(TradingSignal).filter(TradingSignal.state.in_(list(ACTIVE_SIGNAL_STATES))).all()
-    dashboard = {row.get("ticker"): row for row in (build_decision_dashboard(db).get("all_candidates") or [])}
+    dashboard_payload = build_decision_dashboard(db)
+    _last_market_state = dashboard_payload.get("market_state") or {}
+    dashboard = {row.get("ticker"): row for row in (dashboard_payload.get("all_candidates") or [])}
     changed = 0
     if not session.get("actionable_live_quotes"):
         for row in rows:
@@ -342,9 +488,12 @@ def reconcile_signals(db: Session, *, session: dict[str, Any] | None = None, now
             row.next_validation_at = _iso(now + timedelta(minutes=3))
             row.current_price = _float(candidate.get("current_or_previous_session_price")) if candidate else row.current_price
             if candidate:
-                contract = dict(candidate.get("preferred_option_contract") or {})
+                contract = _enrich_contract_from_estimate(db, candidate)
                 contract["maximum_acceptable_premium"] = candidate.get("maximum_acceptable_option_entry")
-                row.entry_json = json.dumps(candidate.get("entry_trigger") or {}, sort_keys=True)
+                entry = dict(candidate.get("entry_trigger") or {})
+                entry["acceptable_zone"] = candidate.get("acceptable_entry_zone") or candidate.get("entry_zone")
+                entry["maximum_chase_price"] = _chase_price(candidate)
+                row.entry_json = json.dumps(entry, sort_keys=True)
                 row.invalidation_json = json.dumps(candidate.get("invalidation") or {}, sort_keys=True)
                 row.targets_json = json.dumps(candidate.get("targets") or [], sort_keys=True)
                 row.contract_json = json.dumps(contract, sort_keys=True, default=str)
@@ -381,14 +530,14 @@ def reconcile_signals(db: Session, *, session: dict[str, Any] | None = None, now
             created += 1
     db.commit()
     active = db.query(TradingSignal).filter(TradingSignal.state.in_(list(ACTIVE_SIGNAL_STATES))).order_by(TradingSignal.score.desc()).all()
-    return {"created": created, "changed": changed, "active_count": len(active), "last_scan": _iso(now), "session": session}
+    return {"created": created, "changed": changed, "active_count": len(active), "last_scan": _iso(now), "session": session, "market_state": _last_market_state}
 
 
 def get_active_signals(db: Session, *, refresh: bool = False) -> dict[str, Any]:
     session = get_market_session()
     existing = db.query(TradingSignal).filter(TradingSignal.state.in_(list(ACTIVE_SIGNAL_STATES))).all()
     now = datetime.now(timezone.utc)
-    needs_reconcile = refresh or not session.get("actionable_live_quotes") or any((_parse(row.valid_until) and now >= _parse(row.valid_until)) for row in existing)
+    needs_reconcile = refresh or bool(existing) and (not session.get("actionable_live_quotes") or any((_parse(row.valid_until) and now >= _parse(row.valid_until)) for row in existing))
     if needs_reconcile:
         reconcile_signals(db)
         session = get_market_session()
@@ -407,6 +556,8 @@ def get_active_signals(db: Session, *, refresh: bool = False) -> dict[str, Any]:
         "market_session": session,
         "message": "There is nothing good at the moment. I am still working." if not items else None,
         "states_visible": sorted(ACTIVE_SIGNAL_STATES),
+        "market_regime": (_last_market_state or {}).get("overall_regime") or "UNAVAILABLE",
+        "data_health": "LIVE DATA REQUIRED" if session.get("actionable_live_quotes") else "PLANNING DATA — REFRESH AFTER OPEN",
     }
 
 
@@ -430,7 +581,23 @@ def validate_signal_for_paper_entry(db: Session, signal_id: str, payload: dict[s
         _event(db, row, "TRIGGERED", row.state, "ACTIVE", "paper order accepted from triggered signal")
         row.state = "ACTIVE"
         row.updated_at = now_iso()
+    if payload.get("recommendation_id"):
+        row.paper_recommendation_id = str(payload["recommendation_id"])
+        row.updated_at = now_iso()
     return row
+
+
+def record_signal_outcome(db: Session, signal_id: str, outcome: dict[str, Any]) -> dict[str, Any]:
+    row = db.query(TradingSignal).filter(TradingSignal.signal_id == signal_id).first()
+    if not row:
+        raise ValueError("signal not found")
+    allowed = {"outcome", "mfe", "mae", "target_before_invalidation", "option_pnl", "notes"}
+    sanitized = {key: outcome.get(key) for key in allowed if key in outcome}
+    row.outcome_json = json.dumps(sanitized, sort_keys=True, default=str)
+    row.updated_at = now_iso()
+    _event(db, row, "OUTCOME_RECORDED", row.state, row.state, "signal outcome recorded", sanitized)
+    db.commit()
+    return _serialize(row)
 
 
 def trigger_signal(db: Session, signal_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:

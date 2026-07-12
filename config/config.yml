@@ -114,7 +114,8 @@ active_signals:
   closed_interval_seconds: 1800
   default_valid_minutes: 15
   maximum_chase_underlying_pct: 0.75
-  require_ai_validation: false
+  minimum_reward_to_risk: 1.5
+  require_ai_validation: true
 
 profile_completeness:
   profile_version: ticker-profile-v2
