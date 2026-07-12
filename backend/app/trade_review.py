@@ -832,10 +832,11 @@ def _resolve_accounts_for_user(db: Session, username: str) -> tuple[list[TradeRe
 
 
 def _default_range_for_account(account: TradeReviewAccount, payload: dict[str, Any]) -> tuple[str, str]:
-    to_value = str(payload.get("to_date") or now_utc().date().isoformat())
+    exchange_date = now_utc().astimezone(ET_TZ).date()
+    to_value = str(payload.get("to_date") or exchange_date.isoformat())
     fixed_lookback = int(config_manager.get("trade_review", "fixed_lookback_days", default=0) or 0)
     if fixed_lookback > 0:
-        return (now_utc().date() - timedelta(days=fixed_lookback)).isoformat(), to_value
+        return (exchange_date - timedelta(days=fixed_lookback)).isoformat(), to_value
     from_value = str(payload.get("from_date") or "").strip()
     if from_value:
         return from_value, to_value
@@ -846,7 +847,7 @@ def _default_range_for_account(account: TradeReviewAccount, payload: dict[str, A
         if parsed:
             start = (parsed - timedelta(days=max(1, overlap))).date().isoformat()
             return start, to_value
-    return (now_utc().date() - timedelta(days=max(1, lookback))).isoformat(), to_value
+    return (exchange_date - timedelta(days=max(1, lookback))).isoformat(), to_value
 
 
 def _trade_group_key(account_ref: str, fill: TradeReviewFill, sequence: int) -> str:
