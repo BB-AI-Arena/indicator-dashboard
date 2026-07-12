@@ -573,6 +573,37 @@ class PaperPortfolioEvent(Base):
     created_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
 
+class PaperMorningCandidate(Base):
+    """Immutable premarket candidate snapshot for the paper portfolio.
+
+    The payload captures what was known before the open. Outcome fields may be
+    appended later, but the original morning ranking is never rewritten.
+    """
+
+    __tablename__ = "paper_morning_candidates"
+    __table_args__ = (
+        UniqueConstraint("morning_date", "symbol", name="uq_paper_morning_candidate_date_symbol"),
+        Index("ix_paper_morning_candidates_date_rank", "morning_date", "rank"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    morning_date = Column(String(16), nullable=False, index=True)
+    symbol = Column(String(16), nullable=False, index=True)
+    rank = Column(Integer, nullable=True)
+    direction = Column(String(16), nullable=True)
+    status = Column(String(40), nullable=False)
+    score = Column(Float, nullable=True)
+    catalyst_strength = Column(String(16), nullable=True)
+    gap_pct = Column(Float, nullable=True)
+    premarket_rvol = Column(Float, nullable=True)
+    triggered = Column(Boolean, nullable=False, default=False)
+    outcome = Column(String(40), nullable=True)
+    outcome_json = Column(Text, nullable=True)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class PaperPerformanceSnapshot(Base):
     __tablename__ = "paper_performance_snapshots"
     __table_args__ = (Index("ix_paper_performance_snapshots_portfolio_created_at", "paper_portfolio_id", "created_at"),)

@@ -209,6 +209,11 @@ export const api = {
   etradeOrders: () => request('/api/etrade/orders', { timeoutMs: 15000 }),
   etradeTrades: () => request('/api/etrade/trades', { timeoutMs: 15000 }),
   paperPortfolio: () => request('/api/paper/portfolio', { timeoutMs: 20000 }),
+  paperMorningBrief: () => request('/api/paper/morning-brief', { timeoutMs: 30000 }),
+  paperMorningRefresh: () => request('/api/paper/morning-brief/refresh', { method: 'POST', timeoutMs: 30000 }),
+  paperMorningOutcome: (candidateId, payload) => request('/api/paper/morning-candidates/' + encodeURIComponent(candidateId) + '/outcome', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeoutMs: 15000,
+  }),
   paperPositions: () => request('/api/paper/positions', { timeoutMs: 20000 }),
   paperOrders: () => request('/api/paper/orders', { timeoutMs: 20000 }),
   paperRecommendations: (limit = 100) => request(`/api/paper/recommendations?limit=${encodeURIComponent(limit)}`, { timeoutMs: 15000 }),

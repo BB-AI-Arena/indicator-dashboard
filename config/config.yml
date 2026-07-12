@@ -373,3 +373,19 @@ paper_portfolio:
   overnight_max_spread_pct: 5
   mandatory_loser_review_et: "15:30"
   mandatory_loser_cutoff_et: "15:50"
+
+morning_routine:
+  enabled: true
+  premarket_start_et: "04:00"
+  final_brief_time_et: "09:15"
+  max_candidates: 10
+  opening_confirmation_timeframe: "5m"
+  setup_context_timeframe: "15m"
+  management_timeframe: "5m"
+  minimum_score: 55
+  max_gap_atr_multiple: 3.0
+  require_option_liquidity: true
+  allow_thin_small_caps: false
+  refresh_minutes: 5
+  catalyst_lookback_days: 2
+  premarket_comparison_sessions: 20

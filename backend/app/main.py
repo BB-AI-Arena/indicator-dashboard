@@ -28,6 +28,7 @@ from .db import Base, SessionLocal, engine, get_db
 from .earnings_calendar import upcoming_earnings_feed
 from .etrade_positions import get_open_option_positions
 from .market_session import get_market_session
+from .morning_routine import build_morning_brief
 from .news_catalyst import build_news_catalyst_impact
 from .history import (
     create_or_resume_backfill_run,
@@ -41,7 +42,7 @@ from .history import (
 )
 from .historical_patterns import build_historical_setup_match
 from .indicators import apply_indicators
-from .models import Alert, BackfillChunk, BackfillRun, BrokerageFill, BrokerageOrder, BrokerageTransaction, PaperMigrationReview, Scan, TickerProfile, TradeReviewAccount, TradeReviewSyncRun, TradeReviewTrade, Watchlist
+from .models import Alert, BackfillChunk, BackfillRun, BrokerageFill, BrokerageOrder, BrokerageTransaction, PaperMigrationReview, PaperMorningCandidate, Scan, TickerProfile, TradeReviewAccount, TradeReviewSyncRun, TradeReviewTrade, Watchlist
 from .news_feeds import market_news_feed
 from .options import calculate_ratios, get_option_expirations, ranked_contracts
 from .providers import provider_factory
@@ -1354,6 +1355,40 @@ def etrade_trades(request: Request, db: Session = Depends(get_db)):
 def paper_portfolio(request: Request, db: Session = Depends(get_db)):
     _request_admin(request)
     return get_paper_portfolio(db, market_session=get_market_session())
+
+
+@app.get("/api/paper/morning-brief")
+def paper_morning_brief(request: Request, db: Session = Depends(get_db)):
+    """Return the cached-data morning plan. This route cannot place orders."""
+    _request_admin(request)
+    return build_morning_brief(db, market_session=get_market_session())
+
+
+@app.post("/api/paper/morning-brief/refresh")
+def refresh_paper_morning_brief(request: Request, db: Session = Depends(get_db)):
+    """Rebuild the paper-only watchlist from stored provider data."""
+    _request_admin(request)
+    return build_morning_brief(db, market_session=get_market_session(), refresh=True)
+
+
+@app.post("/api/paper/morning-candidates/{candidate_id}/outcome")
+def paper_morning_candidate_outcome(candidate_id: int, request: Request, payload: dict[str, Any] | None = None, db: Session = Depends(get_db)):
+    """Append an outcome to an immutable morning snapshot; never changes its original payload."""
+    _request_admin(request)
+    row = db.query(PaperMorningCandidate).filter(PaperMorningCandidate.id == candidate_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Morning candidate not found")
+    data = payload or {}
+    outcome = str(data.get("outcome") or "").upper()
+    allowed = {"TRIGGERED", "SKIPPED", "EXTENDED", "INVALIDATED", "TARGET_1", "TARGET_2", "MISSED", "NO_TRADE"}
+    if outcome not in allowed:
+        raise HTTPException(status_code=400, detail=f"Outcome must be one of: {', '.join(sorted(allowed))}")
+    row.triggered = bool(data.get("triggered", outcome == "TRIGGERED"))
+    row.outcome = outcome
+    row.outcome_json = json.dumps(data, sort_keys=True)
+    row.updated_at = now_iso()
+    db.commit()
+    return {"id": row.id, "morning_date": row.morning_date, "symbol": row.symbol, "triggered": row.triggered, "outcome": row.outcome, "snapshot_immutable": True}
 
 
 @app.get("/api/paper/positions")

@@ -19,7 +19,7 @@ from .ticker_profiles import refresh_ticker_profile, serialize_ticker_profile
 
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-ADVISORY_PROMPT_VERSION = "trade-advisory-v2-concise"
+ADVISORY_PROMPT_VERSION = "trade-advisory-v3-concise-morning"
 ADVISORY_ANALYSIS_VERSION = "advisory-analysis-v1"
 ALLOWED_DECISIONS = {"ENTER", "WAIT", "HOLD", "REDUCE", "CLOSE", "ROLL", "AVOID", "DATA REFRESH REQUIRED"}
 ALLOWED_CONVICTIONS = {"Low", "Moderate", "High"}
@@ -102,6 +102,15 @@ PROTECT PROFIT, MOVE STOP, CLOSE, or DATA REFRESH REQUIRED guidance using exact
 supplied levels.
 
 Be concise, evidence-based, and decisive.
+
+When evaluating a premarket paper-trading watchlist, reduce the universe to
+only candidates with a meaningful catalyst or exceptional technical location,
+important price levels, abnormal participation, a defined opening scenario,
+tradeable options, and favorable reward-to-risk. Do not force ten candidates,
+a long, or a short. Do not recommend entry before the opening setup confirms.
+Distinguish an interesting stock, a valid setup, a valid entry, and a missed or
+extended trade. If no qualified trade exists, say: "There is nothing good at
+the moment. I am still working."
 """.strip()
 
 
