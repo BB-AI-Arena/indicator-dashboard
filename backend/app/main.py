@@ -67,6 +67,7 @@ from .trade_review import (
     ensure_trade_review_schema,
     get_active_sync_run as get_trade_review_active_run,
     get_selection as get_trade_review_selection,
+    reviewable_accounts,
     refresh_accounts as refresh_trade_review_accounts,
     list_trade_filters as list_trade_review_filters,
     pause_stale_sync_runs as pause_trade_review_stale_runs,
@@ -949,7 +950,7 @@ def trade_review_accounts(request: Request, db: Session = Depends(get_db)):
     refresh_requested = str(request.query_params.get("refresh") or "").strip().lower() in {"1", "true", "yes"}
     if refresh_requested:
         refresh_trade_review_accounts(db, current.user.username)
-    accounts = db.query(TradeReviewAccount).order_by(TradeReviewAccount.account_mask.asc()).all()
+    accounts = reviewable_accounts(db)
     selection = get_trade_review_selection(db, current.user.username)
     return {
         "selection": selection,

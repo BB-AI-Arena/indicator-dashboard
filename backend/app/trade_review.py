@@ -750,14 +750,42 @@ def refresh_accounts(db: Session, username: str) -> list[dict[str, Any]]:
     return accounts
 
 
+def _preferred_account(db: Session) -> TradeReviewAccount | None:
+    suffix = str(config_manager.get("trade_review", "preferred_account_mask_suffix", default="") or "").strip()
+    if not suffix:
+        return None
+    rows = db.query(TradeReviewAccount).all()
+    normalized_suffix = "".join(character for character in suffix if character.isdigit()) or suffix
+    for account in rows:
+        mask = _safe_text(account.account_mask)
+        digits = "".join(character for character in mask if character.isdigit())
+        if digits.endswith(normalized_suffix) or mask.endswith(suffix):
+            return account
+    return None
+
+
+def reviewable_accounts(db: Session) -> list[TradeReviewAccount]:
+    preferred = _preferred_account(db)
+    if preferred and bool(config_manager.get("trade_review", "restrict_to_preferred_account", default=False)):
+        return [preferred]
+    return db.query(TradeReviewAccount).order_by(TradeReviewAccount.account_mask.asc()).all()
+
+
 def get_selection(db: Session, username: str) -> dict[str, Any]:
     row = db.query(TradeReviewSelection).filter(TradeReviewSelection.username == username).first()
     if not row:
+        preferred = _preferred_account(db)
+        if preferred:
+            return {"selection_mode": "EXPLICIT", "selected_account_refs": [preferred.account_ref], "selection_source": "configured_preferred_account"}
         return {"selection_mode": "EXPLICIT", "selected_account_refs": []}
-    return {
+    selection = {
         "selection_mode": row.selection_mode,
         "selected_account_refs": _json_loads(row.selected_account_refs, []),
     }
+    preferred = _preferred_account(db)
+    if preferred and bool(config_manager.get("trade_review", "restrict_to_preferred_account", default=False)):
+        selection = {"selection_mode": "EXPLICIT", "selected_account_refs": [preferred.account_ref], "selection_source": "configured_preferred_account"}
+    return selection
 
 
 def set_selection(db: Session, username: str, selection_mode: str, account_refs: list[str]) -> dict[str, Any]:
@@ -765,6 +793,10 @@ def set_selection(db: Session, username: str, selection_mode: str, account_refs:
     if mode not in ALLOWED_SELECTION_MODES:
         mode = "EXPLICIT"
     refs = [str(ref).strip() for ref in (account_refs or []) if str(ref).strip()]
+    preferred = _preferred_account(db)
+    if preferred and bool(config_manager.get("trade_review", "restrict_to_preferred_account", default=False)):
+        mode = "EXPLICIT"
+        refs = [preferred.account_ref]
     if mode == "EXPLICIT" and not refs:
         raise ValueError("Select at least one account before importing data.")
     row = db.query(TradeReviewSelection).filter(TradeReviewSelection.username == username).first()
@@ -791,7 +823,7 @@ def _resolve_accounts_for_user(db: Session, username: str) -> tuple[list[TradeRe
     selection = get_selection(db, username)
     mode = str(selection.get("selection_mode") or "EXPLICIT").upper()
     selected_refs = list(selection.get("selected_account_refs") or [])
-    accounts = db.query(TradeReviewAccount).order_by(TradeReviewAccount.account_mask.asc()).all()
+    accounts = reviewable_accounts(db)
     if mode == "ALL":
         chosen = accounts
     else:
@@ -801,6 +833,9 @@ def _resolve_accounts_for_user(db: Session, username: str) -> tuple[list[TradeRe
 
 def _default_range_for_account(account: TradeReviewAccount, payload: dict[str, Any]) -> tuple[str, str]:
     to_value = str(payload.get("to_date") or now_utc().date().isoformat())
+    fixed_lookback = int(config_manager.get("trade_review", "fixed_lookback_days", default=0) or 0)
+    if fixed_lookback > 0:
+        return (now_utc().date() - timedelta(days=fixed_lookback)).isoformat(), to_value
     from_value = str(payload.get("from_date") or "").strip()
     if from_value:
         return from_value, to_value
@@ -2372,7 +2407,7 @@ def build_improvement_plan(summary: dict[str, Any], patterns: dict[str, Any]) ->
 
 def build_overview(db: Session, username: str, filters: dict[str, Any]) -> dict[str, Any]:
     selection = get_selection(db, username)
-    accounts = db.query(TradeReviewAccount).order_by(TradeReviewAccount.account_mask.asc()).all()
+    accounts = reviewable_accounts(db)
     sync_run = serialize_sync_run(db, get_active_sync_run(db))
     selected_accounts, _ = _resolve_accounts_for_user(db, username)
     account_refs = [account.account_ref for account in selected_accounts]

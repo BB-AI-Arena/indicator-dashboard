@@ -347,6 +347,13 @@ social:
   # JSON sources may set token_env and fields without placing credentials here.
   sources: []
 
+trade_review:
+  default_lookback_days: 90
+  fixed_lookback_days: 90
+  incremental_overlap_days: 7
+  preferred_account_mask_suffix: "0560"
+  restrict_to_preferred_account: true
+
 paper_portfolio:
   enabled: true
   account_equity: 100000

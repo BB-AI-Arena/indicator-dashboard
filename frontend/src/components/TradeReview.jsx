@@ -218,8 +218,8 @@ export default function TradeReview({ currentUser }) {
   const improvement = overview?.improvement_plan || {}
   const filters = overview?.available_filters || {}
   const sync = overview?.sync || null
-  const canSync = accountMode === 'ALL' || selectedAccountRefs.length > 0
-  const selectionMissing = accountMode !== 'ALL' && selectedAccountRefs.length === 0
+  const canSync = selectedAccountRefs.length > 0
+  const selectionMissing = selectedAccountRefs.length === 0
   const scopedValue = (value, fallback = '-') => selectionMissing ? fallback : value
 
   const applyFilters = async () => {
@@ -348,7 +348,7 @@ export default function TradeReview({ currentUser }) {
         {(error || detailError) && <p className="mt-3 text-sm text-red-300">{error || detailError}</p>}
         {selectionMissing && (
           <div className="mt-3 rounded border border-amber-700/60 bg-amber-950/30 p-3 text-sm text-amber-100">
-            No E*TRADE account is selected. Choose an account below, or select <strong>All accounts</strong>, then click <strong>Save Selection</strong> before running the import.
+            Account 0560 is not selected yet. Click its checkbox, then click <strong>Save Selection</strong> before running the import.
           </div>
         )}
       </div>
@@ -371,19 +371,10 @@ export default function TradeReview({ currentUser }) {
       <div className="card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold">Account Selector</h3>
-            <p className="text-sm text-amber-300">Select the accounts to import and review. Imported records stay partitioned by account.</p>
+            <h3 className="text-lg font-semibold">Account 0560</h3>
+            <p className="text-sm text-amber-300">Trade Review is restricted to the E*TRADE account ending in 0560. Imported records remain partitioned by account.</p>
           </div>
-          <div className="flex items-center gap-4 text-sm">
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={accountMode === 'EXPLICIT'} onChange={() => setAccountMode('EXPLICIT')} />
-              Selected accounts
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={accountMode === 'ALL'} onChange={() => setAccountMode('ALL')} />
-              All accounts
-            </label>
-          </div>
+          <span className="badge border border-emerald-700/60 bg-emerald-900/30 text-emerald-200">0560 ONLY</span>
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -394,8 +385,7 @@ export default function TradeReview({ currentUser }) {
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={accountMode === 'ALL' ? true : selectedAccountRefs.includes(account.account_ref)}
-                      disabled={accountMode === 'ALL'}
+                      checked={selectedAccountRefs.includes(account.account_ref)}
                       onChange={() => toggleSelectedRef(account.account_ref)}
                     />
                     <span className="font-semibold text-slate-100">{account.account_mask || '-'}</span>
