@@ -219,6 +219,8 @@ export default function TradeReview({ currentUser }) {
   const filters = overview?.available_filters || {}
   const sync = overview?.sync || null
   const canSync = accountMode === 'ALL' || selectedAccountRefs.length > 0
+  const selectionMissing = accountMode !== 'ALL' && selectedAccountRefs.length === 0
+  const scopedValue = (value, fallback = '-') => selectionMissing ? fallback : value
 
   const applyFilters = async () => {
     setAppliedFilters({ ...draftFilters })
@@ -344,21 +346,26 @@ export default function TradeReview({ currentUser }) {
           </div>
         </div>
         {(error || detailError) && <p className="mt-3 text-sm text-red-300">{error || detailError}</p>}
+        {selectionMissing && (
+          <div className="mt-3 rounded border border-amber-700/60 bg-amber-950/30 p-3 text-sm text-amber-100">
+            No E*TRADE account is selected. Choose an account below, or select <strong>All accounts</strong>, then click <strong>Save Selection</strong> before running the import.
+          </div>
+        )}
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryStat label="Net P&L" value={money(summary.net_pnl)} tone={toneForPnl(summary.net_pnl)} />
-        <SummaryStat label="Win Rate" value={pct(summary.win_rate)} />
-        <SummaryStat label="Average Winner / Loser" value={`${money(summary.average_winner)} / ${money(summary.average_loser)}`} />
-        <SummaryStat label="Profit Factor / Expectancy" value={`${summary.profit_factor ?? '-'} / ${money(summary.expectancy)}`} />
-        <SummaryStat label="Max Drawdown" value={money(summary.max_drawdown)} tone="text-red-300" />
-        <SummaryStat label="Strongest Edge" value={textOrDash(patterns.strongest_repeatable_edge)} />
-        <SummaryStat label="Most Damaging Mistake" value={textOrDash(patterns.most_damaging_repeated_mistake)} />
-        <SummaryStat label="Dollars Lost to Top Mistake" value={money(patterns.estimated_dollars_lost_by_top_mistake)} tone="text-red-300" />
-        <SummaryStat label="Data Coverage" value={pct(summary.data_coverage)} />
-        <SummaryStat label="Data Confidence" value={pct(summary.data_confidence_score)} />
-        <SummaryStat label="Completed / Unresolved" value={`${summary.completed_trades ?? 0} / ${summary.unresolved_trades ?? 0}`} />
-        <SummaryStat label="Trade Count" value={summary.total_trades ?? 0} />
+        <SummaryStat label="Net P&L" value={scopedValue(money(summary.net_pnl))} tone={toneForPnl(summary.net_pnl)} />
+        <SummaryStat label="Win Rate" value={scopedValue(pct(summary.win_rate))} />
+        <SummaryStat label="Average Winner / Loser" value={scopedValue(`${money(summary.average_winner)} / ${money(summary.average_loser)}`)} />
+        <SummaryStat label="Profit Factor / Expectancy" value={scopedValue(`${summary.profit_factor ?? '-'} / ${money(summary.expectancy)}`)} />
+        <SummaryStat label="Max Drawdown" value={scopedValue(money(summary.max_drawdown))} tone="text-red-300" />
+        <SummaryStat label="Strongest Edge" value={scopedValue(textOrDash(patterns.strongest_repeatable_edge))} />
+        <SummaryStat label="Most Damaging Mistake" value={scopedValue(textOrDash(patterns.most_damaging_repeated_mistake))} />
+        <SummaryStat label="Dollars Lost to Top Mistake" value={scopedValue(money(patterns.estimated_dollars_lost_by_top_mistake))} tone="text-red-300" />
+        <SummaryStat label="Data Coverage" value={scopedValue(pct(summary.data_coverage))} />
+        <SummaryStat label="Data Confidence" value={scopedValue(pct(summary.data_confidence_score))} />
+        <SummaryStat label="Completed / Unresolved" value={scopedValue(`${summary.completed_trades ?? 0} / ${summary.unresolved_trades ?? 0}`)} />
+        <SummaryStat label="Trade Count" value={scopedValue(summary.total_trades ?? 0)} />
       </div>
 
       <div className="card p-4">
