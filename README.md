@@ -1,858 +1,639 @@
 # Indicator Dashboard
 
-[![Active development](https://img.shields.io/badge/status-active%20development-orange?style=flat-square)](https://github.com/BB-AI-Arena/indicator-dashboard)
+[![Status: active development](https://img.shields.io/badge/status-active%20development-orange?style=flat-square)](https://github.com/BB-AI-Arena/indicator-dashboard)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/frontend-React-61DAFB?style=flat-square&logo=react&logoColor=20232A)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/build-Vite-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
 [![SQLite](https://img.shields.io/badge/storage-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Docker Compose](https://img.shields.io/badge/runtime-Docker%20Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![Last commit](https://img.shields.io/github/last-commit/BB-AI-Arena/indicator-dashboard?style=flat-square)](https://github.com/BB-AI-Arena/indicator-dashboard/commits/main)
+[![Beta](https://img.shields.io/badge/beta-looking%20for%20testers-7C3AED?style=flat-square)](https://github.com/BB-AI-Arena/indicator-dashboard/issues)
+[![Issues welcome](https://img.shields.io/badge/issues-welcome-2EA44F?style=flat-square)](https://github.com/BB-AI-Arena/indicator-dashboard/issues)
 
-A local, read-only options decision dashboard for cached market-data analysis, deterministic setup ranking, contract-quality review, and session-aware trade planning.
+**An AI-assisted options signal engine that turns market data into actionable setups, contract selections, position-management decisions, and measurable outcomes.**
 
-This project is built for decision support. It does not place trades, route orders, manage positions, or provide financial advice.
+Indicator Dashboard is evolving from a conventional indicator screen into a serious options signal platform. It scans a configured ticker universe, detects deterministic long and short setups, validates price structure with VWAP, volume, key levels, historical behavior, market context, and options quality, then publishes time-bounded signals with exact conditions.
 
-## Make Better Options Decisions
+It is built for active options traders, day traders, swing traders, quant-minded retail traders, market-data developers, and beta testers who want to inspect how a signal was created rather than accept a black-box label.
 
-Indicator Command Center turns a noisy options workflow into a focused decision page. It brings market regime, price structure, money flow, options positioning, catalysts, historical setup behavior, contract quality, and risk conditions into one place so the next action is clear.
+> **There is nothing good at the moment. I am still working.**
+>
+> No-trade output is a product feature. The engine is allowed to return no signal instead of lowering its standards to fill a list.
 
-Instead of forcing a trade from an incomplete signal, the dashboard separates:
+## Demo And Screens
 
-- **Best current setups** from setups that are still forming.
-- **Real E*TRADE positions** from the isolated paper portfolio.
-- **Historical evidence** from live-session confirmation.
-- **Executable quote data** from previous-session planning data.
-- **Deterministic scoring** from optional AI explanations.
+The repository currently has no committed screenshots or hosted demo. Run the local stack to inspect the dashboard, ACTIVE SIGNALS, Morning Setup, Paper Portfolio, Trade Review, Watchlist Intelligence, and read-only E*TRADE Positions views.
 
-Every candidate is tied to an entry trigger, invalidation level, target areas, contract choice, liquidity checks, historical sample size, expected value, and the conditions that would cancel the thesis. When the evidence is incomplete or the risk/reward is poor, the platform can say no trade.
+~~~bash
+cp .env.example .env
+docker compose up -d --build
+~~~
 
-The result is a practical research and trade-management workspace for traders who want richer context without sacrificing traceability, data freshness, or control over their own decisions.
+Open http://localhost:5173 after startup.
 
-## Core Capabilities
+## Why This Exists
 
-- **Technical scanner**: scores watchlist symbols as `LONG`, `SHORT`, or `NEUTRAL` using VWAP, EMA alignment, RSI, MACD, Bollinger midpoint, volume, and prior-bar break logic.
-- **Options sentiment**: calculates put/call and call/put volume and open-interest ratios across the configured number of expirations.
-- **Contract ranking**: ranks call and put candidates after filtering out expired, illiquid, missing-quote, and wide-spread contracts.
-- **AI validation gate**: optionally sends a fully factual candidate payload to OpenAI and displays a recommendation only when the model returns `PROCEED`.
-- **Session play plan**: displays scenario-based target/stop levels and historical setup context for directional symbols.
-- **Structure-aware exit management**: creates an exit plan before entry, tracks R-multiples and profit giveback, manages VWAP/structure stops, and reviews partial-profit and overnight decisions for both paper and real positions.
-- **Persistent ticker intelligence profiles**: creates a durable profile for each watchlist ticker, stores reusable candle/setup/news/options statistics, and refreshes incrementally from SQLite instead of rebuilding on page load.
-- **Decision dashboard**: the main dashboard renders only top long/short candidates, forming setups, next-session bias, and no-trade conditions from stored profiles and cached analysis.
-- **Watchlist Intelligence**: detailed watchlist coverage, profile state, historical tables, provider diagnostics, and ticker drill-ins live outside the main decision page.
-- **Model-based advisory layer**: packages deterministic market facts into a structured OpenAI advisory request, validates the model output, and falls back to deterministic analysis when hard gates fail or the model is unavailable.
-- **Provider abstraction**: supports E*TRADE for quotes/options, Yahoo/yfinance, Alpha Vantage, Finnhub, Stooq, and Twelve Data for candles and quote fallback.
-- **Local persistence**: stores watchlist, scans, alerts, OAuth token data, and cache files under `./data`.
-- **Central Time UI**: displays timestamps in `America/Chicago` (`CST`/`CDT` depending on daylight saving time).
+Most trading dashboards provide more data without providing a better decision surface. They often:
 
-## What This Is Not
+- overload charts with equal-weight indicators;
+- leave stale setups visible after the trade is gone;
+- confuse a good thesis with a good entry;
+- promote the highest score even when every candidate is weak;
+- ignore spread, liquidity, theta, IV, and contract structure;
+- turn put/call activity into unsupported institutional claims;
+- hide missing data behind zeros or generic confidence labels; and
+- never measure whether a signal actually worked.
 
-- Not an execution system.
-- Not an automated trading bot.
-- Not a broker integration for order placement.
-- Not a source of guaranteed real-time data.
-- Not financial, tax, or investment advice.
+This project is designed to answer:
 
-Use `ACTIVE SIGNALS` for time-bounded deterministic signal output. The system still does not
-place brokerage orders automatically, and a signal is removed as soon as its validity gates fail.
+- What is actionable now?
+- What exact price confirms the setup?
+- Where is invalidation?
+- Has the entry already been missed?
+- Which option contract fits the setup?
+- What is the maximum acceptable premium?
+- What should happen during the next 15 minutes?
+- When should a signal disappear?
+- How often have comparable setups worked?
+- How should an open position be managed?
+
+## What It Does
+
+- Scans a configured core universe on server-side schedules.
+- Detects deterministic long and short setup families.
+- Rejects chased, extended, stale, illiquid, or negative-risk/reward opportunities.
+- Selects option contracts using DTE, strike, Greeks, IV, spread, volume, open interest, and expected value.
+- Publishes exact entry, invalidation, target, premium, holding-window, and expiration conditions.
+- Removes dead signals and preserves their history.
+- Separates real E*TRADE records from paper activity.
+- Stores reusable ticker intelligence and historical setup evidence.
+- Supports structured OpenAI validation and advisory output.
+- Allows no-trade output at every stage.
+
+## ACTIVE SIGNALS
+
+ACTIVE SIGNALS is the center of the platform. It contains only currently valid, actionable signals. A signal must originate from a deterministic setup classifier and pass price, VWAP, volume, level, reward-to-risk, contract, data-quality, and AI-validation gates.
+
+Each signal can provide:
+
+- ticker, direction, setup, state, and confidence;
+- current underlying price;
+- ideal entry and acceptable entry zone when available;
+- maximum chase price;
+- exact invalidation;
+- Target 1 and Target 2;
+- expected holding window and expiration;
+- preferred contract, expiration, strike, and call/put type;
+- last price, bid, ask, midpoint, and maximum acceptable premium;
+- expected option values when cached estimates exist;
+- historical result and sample size;
+- VWAP, volume, key-level, freshness, and conflict fields; and
+- one exact next action.
+
+Example only; these are not live market values:
+
+~~~text
+NVDA — LONG — VWAP RECLAIM LONG — WAITING FOR RETEST
+
+Preferred entry: Buy only after a pullback to $181.60–$181.90 holds above VWAP.
+Breakout alternative: Completed 5-minute close above $183.10 with relative volume above 1.4.
+Maximum chase: $183.45
+Invalidation: Completed 5-minute close below $180.95.
+Targets: $184.80 / $186.20
+Preferred option: 21-DTE $182.50 call
+Maximum acceptable premium: $6.10
+Next action: Wait for pullback confirmation. Do not enter at current price.
+~~~
+
+### Signal Lifecycle
+
+The persisted signal vocabulary includes:
+
+~~~text
+FORMING                    READY
+TRIGGERED                  ACTIVE
+WAITING FOR RETEST         WAITING FOR CONFIRMATION
+EXTENDED                   DO NOT CHASE
+EXPIRED                    INVALIDATED
+TARGET REACHED             DATA STALE
+REMOVED
+~~~
+
+Only READY, TRIGGERED, ACTIVE, WAITING FOR RETEST, and WAITING FOR CONFIRMATION appear in the active view. Extended, stale, rejected, invalidated, expired, completed, and removed signals move to Signal History with the reason and audit events.
+
+The default short-term horizon is NEXT 15 MINUTES. The server evaluator runs every three minutes during the actionable monitoring window and every thirty minutes outside it. Closed sessions are planning mode and do not create new executable intraday signals.
+
+### Best Long, Best Short, And Top Opportunities
+
+The tab may show:
+
+- Best Active Long Signal;
+- Best Active Short Signal;
+- Best 15-Minute Opportunity; and
+- up to ten active signals.
+
+These are maximums, not quotas. There is no forced long, forced short, forced top-ten list, or threshold reduction to populate the screen.
+
+## Morning Trading Brief
+
+The Morning Setup tab narrows the paper-trading universe before the open using:
+
+- overnight market context;
+- company, sector, and macro catalysts;
+- premarket gaps and gap-versus-ATR behavior;
+- same-time-of-day premarket relative volume;
+- daily and premarket support/resistance;
+- market and sector alignment;
+- option availability and liquidity;
+- opening breakout, pullback, failed-break, and no-trade scenarios; and
+- maximum chase thresholds.
+
+The current configuration uses 15-minute setup context and 5-minute opening confirmation. The workflow does not automatically enter at 9:30 AM. It waits for confirmation.
+
+## Focused Chart Design
+
+The default chart emphasizes:
+
+1. VWAP
+2. Volume
+3. Key price levels
+
+Default overlays include candlesticks, VWAP, volume, previous-day high and low, premarket high and low, opening range, support, resistance, entry, invalidation, targets, and trade markers. Advanced indicators remain available in ticker detail and drill-down views.
+
+The backend still calculates and stores EMA, RSI, MACD, ATR, OBV, Chaikin Money Flow, Money Flow Index, Fibonacci levels, historical matches, relative strength, market regime, options positioning, Greeks, IV, news, social context, expected value, and contract quality.
+
+## Deterministic Setup Engine
+
+The deterministic engine establishes the facts. AI does not invent a setup.
+
+The current signal vocabulary includes:
+
+- VWAP reclaim long;
+- VWAP rejection short;
+- breakout long and breakdown short;
+- bull flag and bear flag continuation;
+- support-hold long and resistance-rejection short;
+- failed breakout short and failed breakdown long;
+- opening-range breakout and opening-range breakdown;
+- pullback continuation;
+- momentum continuation;
+- relative-strength long and relative-weakness short; and
+- reversal from a major level.
+
+Detector coverage depends on profile completeness, candles, setup history, and provider data. Missing inputs exclude a ticker instead of becoming zero or neutral.
+
+~~~text
+Deterministic setup classifier
+    -> exact entry / invalidation / targets
+    -> grouped evidence and hard gates
+    -> option contract and liquidity validation
+    -> strict AI validation
+    -> active signal publication or rejection
+~~~
+
+## Anti-Chase Logic
+
+The platform separates a good thesis, a valid setup, a good entry, a missed trade, and an invalidated trade.
+
+Signals can become WAITING FOR RETEST, EXTENDED, or DO NOT CHASE. A directionally correct idea can still be rejected when price has moved beyond the acceptable entry or remaining reward no longer justifies remaining risk.
+
+> **Good thesis. Bad entry. No trade.**
+
+## Options Contract Intelligence
+
+The contract engine evaluates:
+
+- expiration and DTE;
+- strike and moneyness;
+- delta, gamma, theta, vega, and IV;
+- intrinsic and extrinsic value;
+- bid, ask, midpoint, last, spread, volume, and open interest;
+- expected value and reward-to-risk;
+- value at invalidation and targets; and
+- liquidity, stale-data, catalyst, and expiration gates.
+
+Possible outputs are preferred contract, safer contract, higher-leverage contract, or no acceptable contract. Broker-provided Greeks are labeled as broker data. Locally calculated values are labeled as estimates.
+
+## After-Hours Option Estimates
+
+The option-estimation service preserves the last actual option quote or trade instead of replacing it with zero. It separately calculates theoretical current and next-open values when pricing inputs are available.
+
+It can display last actual price, bid, ask, midpoint, baseline type, timestamps, estimated current value, estimated next-open value, IV scenarios, underlying scenarios, refreshed Greeks, model, and input quality.
+
+The configured schedule is three minutes from 07:00 through 17:30 Eastern and thirty minutes outside that window. Estimates are labeled non-executable. They cannot trigger paper fills or trailing stops.
+
+## Existing-Position Management
+
+Real E*TRADE positions and paper positions are analyzed separately. Position analysis can include:
+
+- original entry quality;
+- current underlying and option value;
+- current R and peak R;
+- VWAP, volume, and management-timeframe structure;
+- remaining reward versus remaining risk;
+- profit giveback;
+- theta and IV effects;
+- overnight and catalyst risk; and
+- exact next action.
+
+Potential decisions include HOLD, TAKE PARTIAL, PROTECT PROFIT, MOVE STOP, HOLD RUNNER, DO NOT ADD, CLOSE, THESIS INVALIDATED, and DATA REFRESH REQUIRED.
+
+## Exit Management
+
+An approved paper setup must have an exit plan before entry. It can contain:
+
+- initial stop and structural invalidation;
+- 1R, Target 1, Target 2, and optional runner target;
+- VWAP-loss condition;
+- management-timeframe trend-break condition;
+- time stop;
+- end-of-day rule; and
+- overnight eligibility.
+
+The system tracks MFE, MAE, current R, peak R, realized R, profit captured, and profit surrendered. The configured paper portfolio models a 5% adverse fill assumption, a hybrid exit trail, and same-day loser handling.
+
+These are simulation and analysis rules. The platform does not imply that a suggested stop was placed with E*TRADE.
+
+## E*TRADE Integration
+
+E*TRADE integration is implemented as an OAuth-backed, read-only brokerage-analysis path. It is account-dependent and requires the user’s own consumer credentials and authorization.
+
+The repository supports brokerage facts such as:
+
+- account list and balances;
+- buying power;
+- actual positions and quantities;
+- average cost and market value;
+- orders;
+- fills; and
+- transactions used by Trade Review.
+
+The application polls and caches provider responses; it does not claim streaming market data. Top-of-book bid/ask data is not Level II, and Level II is not currently implemented. E*TRADE orders are not placed by this repository.
+
+OAuth state and tokens are local runtime data, so connection status cannot be inferred from this public README. If the app displays E*TRADE DISCONNECTED, reconnect from Settings. The E*TRADE tab remains read-only.
+
+## Real E*TRADE Versus Paper
+
+This boundary is deliberate and enforced in the data model and routes.
+
+**Real E*TRADE** contains actual brokerage accounts, balances, positions, cost basis, orders, fills, transactions, and real-trade review data.
+
+**Paper Portfolio** contains simulated cash, positions, orders, fills, signal-driven entries, exit management, challenge performance, and paper recommendations.
+
+Paper data never alters real account totals. Real positions never alter the paper balance. Simulated orders cannot reference brokerage order identifiers and never appear in E*TRADE views.
+
+## Paper Portfolio
+
+The paper portfolio is a signal-driven laboratory, not a claim of profitability. It supports the configured $100,000 starting balance, 75% maximum premium deployment, reserve cash, concentration controls, adverse fills, slippage, spread handling, trailing stops, same-day loser liquidation, overnight review, equity curve, P&L, drawdown, win rate, profit factor, and expectancy.
+
+Opening paper trades require a valid TRIGGERED or ACTIVE signal, an acceptable premium, a complete exit plan, and portfolio-risk gates.
+
+## Signal History And Performance
+
+Signal History retains:
+
+- signal ID, ticker, direction, and setup;
+- created, trigger, expiration, validation, and removal timestamps;
+- entry, invalidation, and target levels;
+- selected contract and premium ceiling;
+- whether it triggered;
+- whether it entered paper trading;
+- removal reason;
+- MFE and MAE when recorded;
+- target-before-invalidation result;
+- option outcome when recorded; and
+- model and strategy versions.
+
+Untriggered signals are not counted as trade wins or losses. Signal quality can still be studied separately from paper performance.
+
+The recommendation and paper-performance layers support all-time and rolling win rates, directional accuracy, target-before-invalidation rate, profitable-option rate, average win/loss, profit factor, expectancy, and breakdowns by setup, ticker, regime, calls/puts, DTE, delta, aggression, overnight status, and model version.
+
+## AI Validation Architecture
+
+~~~text
+Market data
+    -> centralized polling and cache
+    -> normalized candles, quotes, options, news, and profiles
+    -> deterministic calculations
+    -> eligibility and risk gates
+    -> strict structured AI validation
+    -> Active Signals
+    -> paper execution or real-position analysis
+    -> outcome tracking
+~~~
+
+The AI layer may interpret and validate supplied facts. It may not invent setups, prices, Greeks, contracts, headlines, probabilities, account values, or institutional intent. It may not promote stale or illiquid contracts, override hard gates, or force a long or short signal.
+
+The signal validator uses the OpenAI Responses API with structured output. If the API key is missing or validation fails, Active Signals fails closed. Deterministic analysis remains available for inspection.
+
+## Persistent Ticker Intelligence
+
+The configured core universe currently contains:
+
+~~~text
+AAPL  MSFT  NVDA  AMZN  GOOGL  META  TSLA
+PLTR  SPCX  CRM   CAT   JPM   PANW  CRWD
+~~~
+
+Ticker profiles persist historical candles, indicators, Fibonacci interactions, setup families, market regimes, relative strength, news and earnings reactions, options snapshots, social aggregates, readiness states, and reusable statistics. Historical setup matching is configured for a three-year period where provider coverage and rate limits support it.
+
+SPCX is preserved exactly as configured. The platform does not silently substitute another ticker if a provider cannot resolve it; the profile or contract remains unresolved/incomplete until supported.
+
+## Data Honesty And Readiness
+
+Every feature distinguishes among actual current data, delayed data, previous-session data, estimated data, historical data, stale data, missing data, and unsupported data.
+
+Missing values are not converted to zero. Previous-session option values are not presented as live executable quotes. Profile readiness is feature-specific. A ticker cannot be READY while mandatory inputs are missing; it may instead be PARTIAL, ANALYSIS_PENDING, STALE, BLOCKED, or ERROR with the missing component shown.
 
 ## Architecture
 
-```text
+```mermaid
+flowchart TD
+    A[E*TRADE and market providers] --> B[Centralized polling and rate limits]
+    B --> C[Normalized data cache]
+    C --> D[SQLite historical store]
+    C --> E[Deterministic setup engine]
+    C --> F[Options and Greeks engine]
+    D --> G[Historical setup matching]
+    E --> H[Eligibility and risk gates]
+    F --> H
+    G --> H
+    H --> I[Structured AI validation]
+    I --> J[Active Signals]
+    J --> K[Paper Portfolio]
+    J --> L[Real-position analysis]
+    K --> M[Signal and trade performance]
+    L --> M
+```
+
+### Actual Stack
+
+- Backend: Python 3.11, FastAPI, Uvicorn, SQLAlchemy, pandas, NumPy, requests.
+- Frontend: React 18, Vite, Tailwind CSS, Lightweight Charts, Recharts.
+- Persistence: SQLite with SQLAlchemy models and incremental cached records.
+- Runtime: separate Python backend and Nginx-served frontend containers through Docker Compose.
+- Calendar: exchange-calendars with the XNYS calendar and America/New_York.
+- Providers: E*TRADE, Yahoo/yfinance, Alpha Vantage, Finnhub, Stooq, and Twelve Data according to configuration.
+- AI: OpenAI Responses API for structured validation and advisory workflows.
+
+~~~text
 indicator-dashboard/
-├── backend/              FastAPI API, scanner, provider integrations, SQLite models
-├── frontend/             React/Vite dashboard UI
-├── config/config.yml     Scanner, indicator, provider, option-filter, and cache config
-├── data/                 Local runtime state; ignored except data/.gitkeep
-└── docker-compose.yml    Backend/frontend local runtime
-```
+├── backend/              FastAPI service, providers, analytics, workers, SQLite models
+├── frontend/             React/Vite application and charts
+├── config/config.yml     Session, provider, profile, signal, and risk settings
+├── data/                 Local runtime database, OAuth tokens, caches; ignored by Git
+├── sql/                  Retention and history helpers
+└── docker-compose.yml    Local backend/frontend runtime
+~~~
 
-### Backend
+## Current Status
 
-- Framework: `FastAPI`
-- Database: `SQLite`
-- Indicators: `pandas` + `numpy`
-- Providers:
-  - `etrade`: quotes, expirations, option chains, ratios, ranked contracts
-  - `alphavantage`: quotes and historical candles
-  - `finnhub`: quotes and historical candles
-  - `stooq`: historical candles when CSV downloads are available
-  - `yahoo`: candles, quotes, options fallback
-  - `twelvedata`: candles
+### Implemented
 
-### Frontend
+- ACTIVE SIGNALS UI, persisted signal lifecycle, active/history filtering, exact levels, expiration, chase removal, and paper-entry gating.
+- Exchange-calendar session awareness and closed-session planning behavior.
+- Focused 15-minute chart and position-analysis surfaces.
+- Morning Setup workflow for paper-trading preparation.
+- Paper Portfolio isolation, adverse-fill simulation, risk controls, exits, and performance tracking.
+- E*TRADE OAuth path and read-only account, position, order, fill, and transaction analysis.
+- Persistent ticker profiles, readiness states, historical setup matching, Fibonacci behavior, news/catalyst analysis, earnings history, money flow, options positioning, and social aggregation.
+- Last-available option pricing and server-side theoretical after-hours estimation.
+- Admin Trade Review for imported E*TRADE history.
+- Backend tests covering market sessions, paper separation, option estimation, historical patterns, position review, and Active Signals.
 
-- Framework: `React`
-- Build: `Vite`
-- Charts: `lightweight-charts`, `recharts`
-- Styling: `Tailwind CSS`
+### Partially Implemented Or Provider-Dependent
 
-## Safety and Secrets
+- Full three-year intraday coverage depends on provider limits, credentials, historical availability, and rate limits.
+- Live option signals require connected E*TRADE data, complete profiles, fresh quotes, acceptable liquidity, and successful AI validation.
+- OpenAI features depend on API key, model availability, latency, rate limits, and structured-response validation.
+- Earnings, news, and some quote histories use configured providers with fallbacks; unavailable sources are shown as unavailable.
+- Social processing exists, but no social source is enabled in config by default.
 
-The repository is configured to avoid publishing runtime secrets and data:
+### Experimental Or Planned
 
-- `.env` and `.env.*` are ignored.
-- `data/*` is ignored except `data/.gitkeep`.
-- SQLite DBs, E*TRADE token JSON, provider cache files, `node_modules`, and build output are ignored.
+- Live order routing is not implemented.
+- Level II/order-book analysis is not implemented; top-of-book is not Level II.
+- Broader cross-symbol calibration, richer option outcome attribution, and additional exit-method comparisons are being expanded.
+- No hosted production environment or committed UI screenshots currently exists.
 
-Keep broker credentials and OAuth tokens local.
+## Beta Testers Wanted
 
-## Access Control
+This is a useful-but-rough beta. The most valuable testers are traders and developers who can report:
 
-The dashboard now starts at a login screen. Access is gated by IP and session token:
+- a signal that should have disappeared but remained visible;
+- a setup that passed with stale or incomplete data;
+- an option contract that should have failed liquidity or spread gates;
+- a mismatch between broker data and displayed values;
+- a paper trade that crossed the real/paper boundary;
+- a historical result that appears to use future information; or
+- a UI state that makes the next action unclear.
 
-- The backend blocks repeated login failures from the same IP after 3 tries.
-- The backend rejects requests unless the client is in Texas, United States.
-- On a fresh database, set `AUTH_INITIAL_PASSWORD` locally if you want the app to seed the `admin`, `Brant`, and `Nik` accounts; the value is never stored in the repository and users are forced to change it on first login.
-- First-time setup can still use `AUTH_BOOTSTRAP_TOKEN` from `.env` to create the initial admin user if you want to override the seeded flow.
-- Admin users can add or disable additional users from the `Settings` tab after signing in.
+Include the tab, ticker, market session, timestamp, provider status, displayed state, and a sanitized reproduction. Never attach credentials, OAuth token files, account numbers, private IPs, or personal data.
 
-If you are running locally, private-network addresses are treated as local-dev traffic. For a strict public deployment, put the app behind a proxy that forwards the real client IP and set the security policy accordingly.
+## Roadmap
 
-## Setup
+- Add committed product screenshots and a hosted beta environment.
+- Expand deterministic setup families and setup-specific exit validation.
+- Improve historical intraday coverage and provider reconciliation.
+- Add calibrated walk-forward probabilities with stronger duplicate control.
+- Expand option outcome attribution for IV, theta, spread, and slippage.
+- Add authorized social connectors with documented rate limits.
+- Add more UI and browser regression coverage.
+- Evaluate optional broker execution only as a separate opt-in project with independent safety controls.
 
-### 1. Create `.env`
+## Installation
 
-```bash
+### Prerequisites
+
+- Docker and Docker Compose.
+- Credentials for any provider you want to use.
+- An E*TRADE developer application for real account/options data.
+- An OpenAI API key for AI validation and advisory output.
+
+### Start The Local Stack
+
+~~~bash
 cp .env.example .env
-```
-
-Required for E*TRADE:
-
-```bash
-ETRADE_CONSUMER_KEY=...
-ETRADE_CONSUMER_SECRET=...
-ETRADE_SANDBOX=false
-ETRADE_CALLBACK_URL=http://localhost:8000/api/auth/etrade/callback
-```
-
-Optional for Twelve Data candles:
-
-```bash
-TWELVEDATA_API_KEY=...
-TWELVEDATA_BASE_URL=https://api.twelvedata.com
-```
-
-Optional for Alpha Vantage quotes and historical candles:
-
-```bash
-ALPHA_VANTAGE_API_KEY=...
-ALPHA_VANTAGE_OUTPUT_FORMAT=json
-```
-
-Optional for Finnhub quotes and historical candles:
-
-```bash
-FINNHUB_API_KEY=...
-```
-
-Optional for the AI validation gate:
-
-```bash
-OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-5.6
-AUTH_BOOTSTRAP_TOKEN=...
-```
-
-Optional for the trade-advisory layer:
-
-```bash
-OPENAI_ADVISORY_MODEL=gpt-5.6
-OPENAI_ADVISORY_FALLBACK_MODEL=gpt-5.4-mini
-OPENAI_ADVISORY_REASONING_EFFORT=high
-OPENAI_ADVISORY_MODE=standard
-OPENAI_MODEL_POSITION_ADVICE=
-OPENAI_MODEL_TRADE_REVIEW=
-```
-
-`OPENAI_MODEL_POSITION_ADVICE` and `OPENAI_MODEL_TRADE_REVIEW` are optional per-feature overrides. If unset, position management and hard-truth trade review use `OPENAI_ADVISORY_MODEL`.
-
-On a fresh install, set a strong local `AUTH_INITIAL_PASSWORD` in `.env` before starting the backend if you want the three initial accounts created. The app forces a password change immediately after sign-in. No initial username/password is documented or hardcoded in the repository.
-
-If exposing the dashboard over a LAN IP or a different backend port, update `ETRADE_CALLBACK_URL` to match the callback registered with E*TRADE.
-
-### 2. Start the app
-
-```bash
 docker compose up -d --build
-```
+~~~
 
-### 3. Open the dashboard
+Default URLs:
 
-- Frontend: `http://localhost:5173`
-- Backend API docs: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/api/health`
-- E*TRADE status: `http://localhost:8000/api/auth/etrade/status`
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
+- API docs: http://localhost:8000/docs
+- Health: http://localhost:8000/api/health
 
-If `BACKEND_PORT` is set in `.env`, replace `8000` with that port.
+If BACKEND_PORT is set in .env, use that port for backend URLs and the E*TRADE callback.
 
-## E*TRADE Authentication
+### Useful Commands
 
-1. Set `ETRADE_CONSUMER_KEY`, `ETRADE_CONSUMER_SECRET`, and `ETRADE_CALLBACK_URL` in `.env`.
-2. Start the app.
-3. Open the dashboard `Settings` tab.
-4. Click `Connect E*TRADE`.
-5. Complete OAuth authorization.
-6. Confirm `/api/auth/etrade/status` reports connected.
+~~~bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose up -d --force-recreate backend
+docker compose down
+~~~
 
-Token data is stored under `./data` and is intentionally not committed.
+### Local Development Without Docker
+
+The repository contains the actual service commands below. Install backend dependencies first and set writable local CONFIG_PATH and DATABASE_PATH values.
+
+~~~bash
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+~~~
+
+In a second shell:
+
+~~~bash
+cd frontend
+npm install
+npm run dev
+~~~
+
+Build the frontend with:
+
+~~~bash
+npm run build
+~~~
 
 ## Configuration
 
-Main configuration lives in `config/config.yml`.
+.env.example is the source of truth for environment variable names. It contains placeholders only. Never commit .env.
 
-### Scanner
+Common variables are:
 
-```yaml
-scan:
-  symbols:
-    - SPY
-    - QQQ
-  interval: 5m
-  period: 5d
-  sleep_seconds: 300
-  min_score_to_alert: 6
-  alert_cooldown_minutes: 30
-```
+~~~text
+BACKEND_PORT
+VITE_API_BASE_URL
+DATABASE_PATH
+CONFIG_PATH
+ETRADE_CONSUMER_KEY
+ETRADE_CONSUMER_SECRET
+ETRADE_SANDBOX
+ETRADE_CALLBACK_URL
+TWELVEDATA_API_KEY
+TWELVEDATA_BASE_URL
+ALPHA_VANTAGE_API_KEY
+FINNHUB_API_KEY
+OPENAI_API_KEY
+OPENAI_MODEL
+OPENAI_ADVISORY_MODEL
+OPENAI_ADVISORY_FALLBACK_MODEL
+OPENAI_ADVISORY_REASONING_EFFORT
+OPENAI_ADVISORY_MODE
+OPENAI_MODEL_POSITION_ADVICE
+OPENAI_MODEL_TRADE_REVIEW
+AUTH_BOOTSTRAP_TOKEN
+AUTH_INITIAL_PASSWORD
+AUTH_PBKDF2_ITERATIONS
+~~~
 
-- `symbols`: seed watchlist.
-- `interval`: candle interval used by the scanner.
-- `period`: candle lookback window.
-- `sleep_seconds`: scanner loop cadence.
-- `min_score_to_alert`: minimum score required to create an alert.
+config/config.yml controls provider selection, session behavior, profile backfill, historical matching, options filters, signal cadence, option-estimation cadence, paper capital and exits, morning preparation, rate limits, and cache TTLs.
 
-### Indicators
+## Security
 
-```yaml
-indicators:
-  ema_fast: 8
-  ema_slow: 21
-  ema_trend: 50
-  rsi_period: 14
-  atr_period: 14
-  bollinger_period: 20
-  bollinger_std: 2
-  volume_avg_period: 20
-  macd_fast: 12
-  macd_slow: 26
-  macd_signal: 9
-```
+- .env and runtime .env.* files are ignored.
+- data/* is ignored except data/.gitkeep.
+- E*TRADE OAuth token files and provider caches remain under local runtime data.
+- This README contains no credentials, keys, passwords, account identifiers, or private network values.
+- Use strong local bootstrap and initial passwords.
+- Do not expose the development server directly to the public internet without TLS, authentication, a reverse proxy, and a forwarded-client-IP policy.
+- E*TRADE integration is read-only in this repository.
+- Paper trades use separate entities and cannot update brokerage totals.
 
-The scanner gives one point for each matching directional condition. Current max score is `8`.
+## API Surface
 
-### Options
+Representative authenticated routes include:
 
-```yaml
-options:
-  enabled: true
-  expirations_to_check: 3
-  min_volume: 50
-  min_open_interest: 100
-  max_spread_pct: 15
-  recommended_max_spread_pct: 5
-  max_quote_age_seconds: 300
-  preferred_delta_min: 0.30
-  preferred_delta_max: 0.55
-```
+~~~text
+GET    /api/signals/active
+POST   /api/signals/refresh
+POST   /api/signals/{signal_id}/trigger
+GET    /api/signals/history
+GET    /api/signals/status
+POST   /api/signals/{signal_id}/outcome
 
-Contract candidates are rejected if they:
+GET    /api/etrade/accounts
+GET    /api/etrade/positions
+GET    /api/etrade/orders
+GET    /api/etrade/trades
 
-- are expired relative to `America/Chicago`;
-- have missing or zero bid/ask;
-- exceed `max_spread_pct`;
-- have volume below `min_volume`;
-- have open interest below `min_open_interest`.
-
-Remaining contracts are scored by spread quality, volume, open interest, moneyness, expiration risk, quote quality, quote staleness, chart confirmation, sentiment confirmation, and delta availability.
-
-Each contract receives:
-
-- `liquidity_grade`
-- `risk_grade`
-- `trade_grade`
-
-Important: this is a **candidate ranking layer**, not a full expected-value model. It does not yet include IV rank, volatility skew, earnings/event risk, theta/day, strategy-specific probability of profit, or option premium backtesting.
-
-### AI Gate
-
-```yaml
-ai:
-  enabled: true
-  model: gpt-5.6
-  timeout_seconds: 20
-```
-
-The AI gate is intentionally conservative:
-
-- it uses only the JSON facts supplied by the app;
-- it returns only `PROCEED` or `DO_NOT_PROCEED`;
-- missing OpenAI configuration returns `DO_NOT_PROCEED`;
-- failed OpenAI requests return `DO_NOT_PROCEED`;
-- deterministic blockers are checked before the model is called.
-
-If the answer is `DO_NOT_PROCEED`, the backend returns a concrete 3-4 sentence explanation.
-
-### Ticker Profiles
-
-```yaml
-ticker_profiles:
-  enabled: true
-  backfill_on_add: true
-  refresh_on_profile_view: false
-  backfill_period: 3y
-  backfill_intervals:
-    - 15m
-    - 1d
-  keep_profile_when_removed_from_watchlist: true
-```
-
-When a symbol is added to the watchlist, the backend creates or reuses a `ticker_profiles` row, refreshes derived statistics from existing SQLite data, and queues the existing resumable historical backfill for the configured intervals. The profile stores data coverage, historical price behavior, indicator summaries, setup-family statistics, Fibonacci-related setup context, recent news/catalyst snapshots, recent options-positioning snapshots, and sample-backed ticker personality statements.
-
-Profiles are incremental. The app appends new candles, setup records, news snapshots, and options snapshots over time; it does not discard the prior profile just because a page reloads.
-
-### Decision Dashboard
-
-```yaml
-decision_dashboard:
-  core_universe:
-    - AAPL
-    - MSFT
-    - NVDA
-    - AMZN
-    - GOOGL
-    - META
-    - TSLA
-    - PLTR
-    - SPCX
-    - CRM
-    - CAT
-    - JPM
-    - PANW
-    - CRWD
-  require_profile_complete: true
-  require_fibonacci_behavior: true
-  require_news_current: true
-```
-
-The main dashboard is a decision page, not a raw-data page. It loads from stored ticker profiles, cached setup records, latest scans, news snapshots, and options-positioning snapshots first. It does not queue history backfills or block on provider calls during page render.
-
-A ticker can appear as `Best Long Setup` or `Best Short Setup` only when deterministic hard gates pass: profile ready, required history present, current setup available, Fibonacci behavior analyzed, sufficient historical sample, positive expected value, current news state, options-chain snapshot, and validated contract context. Incomplete tickers are shown as `PROFILE BUILDING` or `DATA INCOMPLETE`, and the dashboard is allowed to show `No qualified long setup` or `No qualified short setup`.
-
-### Advisory
-
-```yaml
-advisory:
-  enabled: true
-  deterministic_only: false
-  model: gpt-5.6
-  fallback_model: gpt-5.4-mini
-  reasoning_effort: high
-  advisory_mode: standard
-  max_output_tokens: 1400
-  timeout_seconds: 45
-  maximum_calls_per_hour: 20
-  cache_duration_seconds: 1800
-  maximum_advisory_cost: 5.0
-  prompt_version: trade-advisory-v1
-  response_schema_version: advisory-response-v1
-```
-
-The advisory layer is not a probability engine. Deterministic code builds the market/session/setup/options/news package first, then the model explains the package in a strict JSON schema. Validation rejects unsupported probabilities, nonexistent contracts, generic disclaimer boilerplate, guarantee language, and attempts to override hard gates such as insufficient sample size, no acceptable contract, stale data, or non-positive expected value.
-
-Admin users can update advisory model, fallback model, reasoning effort, token budget, timeout, cache duration, and deterministic-only mode from the `Settings` tab. Advice is cached by ticker, candidate, setup version, market-data version, option-chain version, news version, model, prompt version, and analysis version.
-
-### Earnings history in ticker profiles
-
-Ticker profiles persist quarterly earnings history for the configured lookback (one year by default). Alpha Vantage's `EARNINGS` endpoint is preferred, with the configured Finnhub fallback used when available. Each report records reported versus estimated EPS and revenue, classifies the result as `BEAT`, `MISS`, `MIXED`, `IN_LINE`, or `UNKNOWN`, and records report timing.
-
-The profile also measures the stock reaction from stored daily candles: the opening gap, first-session return, three-session and five-session returns, and maximum favorable/adverse movement when those candles exist. Missing historical prices are shown as unavailable rather than estimated. Raw provider responses are cached under `data/cache`; profiles reuse that cache and only refresh it after the configured TTL.
-
-### Social narrative intelligence
-
-Social intelligence is an optional supporting signal. It reads only sources explicitly configured in `config/config.yml` under `social.sources`: `rss` sources use public feeds, while `json` sources are intended for authenticated APIs using a token referenced by `token_env`. The application does not bypass authentication, robots restrictions, paywalls, or rate limits.
-
-Normalized mentions are stored in SQLite with hashed author identifiers, deduplicated discussion groups, stance, topics, relevance, spam risk, and source metadata. Profile summaries include sentiment, mention velocity, unique authors, source diversity, price/options confirmation, representative source links, and historical spike reactions. Social intelligence is capped as a small score contribution and cannot override hard trade gates, liquidity, expected value, stale data, or risk limits. Unconfigured or unavailable sources are reported as unavailable.
-
-### Paper options capital and exits
-
-The E*TRADE position view also calculates paper-portfolio controls from `paper_portfolio` settings. The 75% deployment value is a premium-committed cap with a 25% reserve; it is not an acceptable-loss limit. Realistic risk adds modeled spread, slippage, gap, IV-contraction, and liquidity-failure effects.
-
-Long-option profit protection activates at a conservative executable return of +15% and ratchets a 5% trail from the highest executable bid. The first theoretical protected return is approximately +9.25% before slippage and gap risk. Losing positions are marked for same-day liquidation and are never approved for overnight holding. Green positions require a 70% estimated overnight probability, at least 30 independent examples, sufficient DTE, and acceptable liquidity before `HOLD OVERNIGHT` can appear. All trail and liquidation decisions are recorded in `paper_position_risk_states` and `paper_risk_audit_events`.
-
-### Providers
-
-```yaml
-data:
-  quotes_provider: etrade
-  options_provider: etrade
-  candles_provider: yahoo
-  historical_candles_provider: alphavantage
-  historical_candles_provider_fallback: finnhub
-  quotes_provider_fallback: finnhub
-  options_provider_fallback: none
-  candles_provider_fallback: finnhub
-  fallback_provider: yahoo
-  cache_enabled: true
-  backtest_mode: auto
-```
-
-```yaml
-alphavantage:
-  base_url: https://www.alphavantage.co/query
-  timeout_seconds: 20
-  output_format: json
-  daily_outputsize: full
-  adjusted_outputsize: full
-  intraday_outputsize: full
-  intraday_extended_hours: true
-  intraday_adjusted: true
-  daily_prefer_adjusted: true
-```
-
-Supported provider names:
-
-- `etrade`
-- `alphavantage` for quotes and historical candles
-- `finnhub` for quotes and historical candles
-- `stooq` for historical candles
-- `yahoo`
-- `twelvedata` for candles
-- `none` for fallback fields
-
-Free market-data providers are rate-limited, so the app caches provider responses in SQLite and on disk, skips ranges that already exist, and falls back to the next configured provider instead of hammering the same endpoint repeatedly.
-
-Open E*TRADE positions are loaded with priority, and the backend will try multiple historical providers so the dashboard can build out more intraday and daily back data over time instead of relying on a single shallow slice.
-
-## Running Commands
-
-```bash
-# Build images
-docker compose build
-
-# Start services
-docker compose up -d
-
-# Recreate backend after config/provider changes
-docker compose up -d --force-recreate backend
-
-# Logs
-docker compose logs -f backend
-docker compose logs -f frontend
-
-# Stop services
-docker compose down
-```
-
-## API Reference
-
-Common endpoints:
-
-```text
-GET    /api/health
-GET    /api/config
-GET    /api/cache/candles/status
-GET    /api/providers/status
-GET    /api/db/status
-
-GET    /api/auth/etrade/status
-GET    /api/auth/etrade/connect
-GET    /api/auth/etrade/callback
-POST   /api/auth/etrade/verify
-POST   /api/auth/etrade/disconnect
-
-GET    /api/watchlist
-POST   /api/watchlist
-DELETE /api/watchlist/{symbol}
+GET    /api/paper/portfolio
+GET    /api/paper/positions
+GET    /api/paper/orders
+GET    /api/paper/recommendations
+GET    /api/paper/performance
+POST   /api/paper/orders
 
 GET    /api/dashboard/decision
 GET    /api/watchlist/intelligence
 GET    /api/ticker-profiles/{symbol}
-POST   /api/ticker-profiles/{symbol}/refresh
-POST   /api/advisory/{symbol}
-GET    /api/admin/advisory/settings
-POST   /api/admin/advisory/settings
-
-GET    /api/quote/{symbol}
-GET    /api/candles/{symbol}
-GET    /api/indicators/{symbol}
-GET    /api/scan
-GET    /api/scan/{symbol}
-POST   /api/scan/run
-
-GET    /api/options/{symbol}
-GET    /api/options/{symbol}/ratios
-GET    /api/options/{symbol}/contracts
-POST   /api/ai/trade-gate
-GET    /api/backtest/{symbol}
-GET    /api/backtest/summary/{symbol}
-POST   /api/history/backfill
-GET    /api/history/backfill/status
-POST   /api/history/backfill/cancel
-GET    /api/alerts
-```
-
-Example Alpha Vantage-backed requests:
-
-```bash
-curl http://localhost:8000/api/quote/AAPL
-curl "http://localhost:8000/api/indicators/AAPL?interval=5m&period=5d"
-curl "http://localhost:8000/api/candles/AAPL?interval=1d&period=1y"
-```
-
-## Scanner Logic
-
-The directional scanner compares long and short scores.
-
-Long points can come from:
-
-- close above VWAP;
-- fast EMA above slow EMA;
-- slow EMA above trend EMA;
-- MACD histogram positive and rising;
-- RSI in `45-68`;
-- volume above average;
-- close above Bollinger midpoint;
-- current high above prior high.
-
-Short points can come from:
-
-- close below VWAP;
-- fast EMA below slow EMA;
-- slow EMA below trend EMA;
-- MACD histogram negative and falling;
-- RSI in `32-55`;
-- volume above average;
-- close below Bollinger midpoint;
-- current low below prior low.
-
-Grades:
-
-```text
-0-3  NO_TRADE
-4-5  WATCH
-6-7  TRADE_CANDIDATE
-8+   HIGH_CONVICTION
-```
-
-## Options Ranking and Trade Gate Logic
-
-The `/api/options/{symbol}/contracts` endpoint:
-
-1. Fetches quote and configured expirations.
-2. Removes expired expirations.
-3. Fetches option chains.
-4. Filters invalid contracts.
-5. Fetches current chart signal and options sentiment.
-6. Scores remaining contracts across liquidity, risk, and trade quality.
-7. Returns separate ranked `calls` and `puts`.
-
-Contracts are penalized for:
+GET    /api/options/estimates
+GET    /api/options/estimates/status
+GET    /api/trade-review/overview
+~~~
 
-- `CLOSING`, `DELAYED`, or `SANDBOX` quote types;
-- stale quote timestamps;
-- `0DTE` expiration risk;
-- spread above `5%`;
-- low volume;
-- low open interest;
-- far-OTM positioning;
-- unavailable delta;
-- chart signal not confirming the contract direction.
+Authentication middleware protects application data routes. Health and market-session routes are public status routes. Provider, account, option-estimate, signal, paper, and review data require authentication, with additional admin restrictions where configured.
 
-The UI labels contracts as **Top Liquid Call Candidates** or **Top Liquid Put Candidates** unless chart signal confirms the directional bias.
+## Contributing
 
-The UI separates gate status into:
+There is currently no separate CONTRIBUTING.md. Contributions are welcome through focused pull requests and issues.
 
-- Chart Signal
-- Historical Edge
-- Option Liquidity
-- Data Quality
-- AI Gate
-- Final Decision
+Before opening a pull request:
 
-`Final Decision` is limited to `NO_TRADE`, `WATCH`, `WAIT_FOR_CONFIRMATION`, `TRADE_CANDIDATE`, or `HIGH_CONVICTION`.
+1. Keep credentials, token files, databases, and personal data out of the change.
+2. Preserve the real-versus-paper boundary.
+3. Do not turn missing provider data into zero or fake confidence.
+4. Add focused tests for lifecycle, provider, scoring, or UI behavior.
+5. Run relevant backend tests and npm run build.
+6. Describe provider, market-session, and incomplete-behavior assumptions.
 
-The UI can show `TRADE_CANDIDATE` or `HIGH_CONVICTION` only after:
+A new signal must show how the deterministic classifier creates it, how hard gates reject it, how it expires or invalidates, and how the outcome is recorded. AI prompts must not invent facts or override deterministic gates.
 
-- chart signal grade is `TRADE_CANDIDATE` or `HIGH_CONVICTION`;
-- options sentiment confirms or is neutral;
-- liquidity grade is `A` or `B`;
-- quote is not stale;
-- spread is at or below `recommended_max_spread_pct`;
-- volume is at or above the configured minimum;
-- historical win rate is at least `52%`;
-- contract type matches the directional bias (`LONG` uses `CALL`, `SHORT` uses `PUT`);
-- the AI gate returns `PROCEED`.
+## Project Principles
 
-## Data Freshness
+- No forced trade: the best output can be no signal.
+- Exact levels over vague language: entry, invalidation, targets, and next action are concrete.
+- Good setup is not automatically good entry: chase risk is a first-class gate.
+- Options are instruments, not decoration: spread, liquidity, DTE, Greeks, IV, and theta matter.
+- Data status is part of the answer: current, delayed, previous-session, estimated, stale, missing, and unsupported differ.
+- Deterministic first, AI second: models explain and validate supplied facts; they do not create market facts.
+- Real and paper stay separate: simulated performance never changes brokerage totals.
+- History is auditable: later rule changes should not rewrite what the system originally published.
+- Risk is managed before entry: every paper trade requires an exit plan.
 
-- Quote cache default: `10` seconds.
-- Candle cache default: `60` seconds.
-- Option expiration cache default: `86400` seconds, but expired dates are filtered before use.
-- Option chain/ranking cache default: `60` seconds.
-- Scan cache default: `60` seconds.
+## License And Project Identity
 
-Provider data can be delayed, incomplete, or rate-limited. E*TRADE and Yahoo may differ materially in quote status, chain fields, Greeks, and timestamps.
+The repository currently does not contain a LICENSE file. Until one is added, do not assume the code is available under an open-source license. Check with the repository owner before redistributing or building commercial products from it.
 
-## Backtesting
+The current project name is Indicator Dashboard. Stronger future product-name directions could include Signal Foundry, Option Vector, CandleToContract, or Active Signals, but changing the repository branding is deferred to avoid disrupting the current identity.
 
-Backtesting is setup-level, not full option premium simulation.
+## Final Vision
 
-Current behavior:
+The long-term goal is a serious, inspectable options platform:
 
-- finds historical technical setups matching side and score threshold;
-- simulates next-open entry to same-day close on the underlying;
-- reports occurrence count, wins, win rate, sample confidence, historical edge, and sample trades;
-- prefers candles already stored in SQLite before calling a provider;
-- falls back to scan-history approximation when historical candles are unavailable.
+~~~text
+Market context
+    -> setup detection
+    -> exact entry
+    -> contract selection
+    -> signal validation
+    -> disciplined paper execution
+    -> position management
+    -> historical outcome
+    -> calibrated improvement
+~~~
 
-Limitations:
+Not a wall of indicators. Not a forced trade list. Not an opaque AI oracle.
 
-- does not reconstruct historical option chains;
-- does not model fills, slippage, bid/ask movement, IV changes, theta decay, or assignment/exercise;
-- should be treated as context, not proof of edge.
+A platform that can say exactly what must happen, exactly what breaks the thesis, exactly what contract is being considered, and exactly when the setup is no longer actionable.
 
-## Historical Backfill and Rate Limits
+## Beta Invitation
 
-Rate limits are expected with free or retail providers. The app avoids repeated provider calls by storing candle history in SQLite, checking stored ranges before each fetch, and chunking historical backfills.
+Clone the repository, run it locally, inspect the signal audit trail, and open an issue with what held up and what did not. Traders, data engineers, quant developers, and careful skeptics are welcome.
 
-Historical intraday availability may be limited. For example, providers may return only part of a requested `5m` or `15m` range. The app stores whatever is returned and continues building history over time from future scans and slow backfills.
+Start with the local stack and remember the most honest result is sometimes:
 
-Stooq is configured as the default historical candle provider because it does not require an API key. If Stooq returns browser verification or a captcha page instead of CSV, the app treats that as a provider cooldown and pauses rather than bypassing the verification or hammering the provider.
-
-Backfill behavior:
-
-- intraday intervals are chunked, defaulting to 7-day chunks;
-- daily history can use larger chunks, defaulting to 365 days;
-- `1m` history is not included by default;
-- incomplete backfill chunks can be resumed;
-- provider requests are throttled and rate-limit errors use exponential backoff with jitter;
-- OpenAI is never called during historical backfill.
-
-Run a slow backfill:
-
-```bash
-curl -X POST http://localhost:8001/api/history/backfill
-```
-
-Inspect backfill status:
-
-```bash
-curl http://localhost:8001/api/history/backfill/status
-```
-
-Inspect provider/rate-limit status:
-
-```bash
-curl http://localhost:8001/api/providers/status
-```
-
-Adding a ticker to the watchlist also queues a profile backfill using the configured ticker-profile period and intervals. The backfill worker still checks SQLite coverage first, skips stored ranges, honors provider cooldowns, and resumes incomplete chunks.
-
-## Local Development
-
-Backend:
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Build check:
-
-```bash
-cd frontend
-npm run build
-```
-
-Python syntax check:
-
-```bash
-python3 -m compileall backend/app
-```
-
-## Historical Setup Matching
-
-The dashboard includes a deterministic `Historical Setup Match` panel for current long and short candidates. It compares the latest completed 15-minute setup with prior stored SQLite candles for the same symbol and, separately, comparable watchlist setups.
-
-Key rules:
-
-- Probabilities come from stored historical examples, not GPT.
-- Same-symbol evidence and watchlist-wide evidence are displayed separately.
-- Samples under 10 examples are labeled insufficient.
-- Outcomes are calculated forward from the setup timestamp only; future candles are not used to define the setup.
-- Overlapping candles from the same move are deduplicated so one trend does not become many fake wins.
-- Option contracts still must pass liquidity, spread, freshness, and structure gates.
-
-Queue the slow provider-safe history warmup:
-
-```bash
-curl -X POST http://localhost:8001/api/history/setup-match/backfill
-```
-
-Inspect a symbol match:
-
-```bash
-curl http://localhost:8001/api/history/setup-match/AAPL?side=LONG&interval=15m&period=3y
-```
-
-The default backfill period is now `3y`. Intraday availability still depends on the provider; when a provider cannot supply three years of 15-minute data, the app stores the maximum available and continues building history over time.
-
-## Profile Completeness
-
-Ticker readiness is evaluated server-side after profile refreshes, backfills, startup
-reconciliation, and profile requests. The staged states are:
-
-`NOT_STARTED`, `BUILDING`, `PARTIAL`, `ANALYSIS_PENDING`, `READY_FOR_PLANNING`,
-`READY_FOR_LIVE_ANALYSIS`, `STALE`, `BLOCKED`, and `ERROR`.
-
-The evaluator persists component-level readiness for history, indicators, support/resistance,
-Fibonacci, setup history, sample size, market regime, relative strength, news, options,
-deterministic scoring, and live freshness. Missing values remain null or are labeled Pending,
-Unavailable, Insufficient sample, Data stale, or Provider unavailable. A partial profile has
-no numeric score and cannot enter the dashboard’s Top Long or Top Short rankings.
-
-SQLite retention maintenance:
-
-```bash
-sqlite3 data/indicator.db < sql/retention.sql
-```
-
-## Recommendation Performance
-
-Every material dashboard candidate is stored as an immutable recommendation snapshot in
-`recommendation_records`. The lifecycle is `CREATED` -> `TRIGGERED` -> `RESOLVED`; a
-recommendation that never triggers is tracked separately and is excluded from trade win
-rates. The original deterministic inputs are retained in `snapshot_json`, while lifecycle
-changes are append-only in `recommendation_events`.
-
-Performance is available on the dashboard and Paper Portfolio tabs, or through:
-
-```bash
-curl http://localhost:8001/api/recommendations/performance
-```
-
-For paper-trading evaluation, an admin can record lifecycle events without changing the
-original recommendation:
-
-```bash
-curl -X POST http://localhost:8001/api/recommendations/<id>/trigger \
-  -H 'Content-Type: application/json' \
-  -d '{"entry_price": 123.45, "option_entry_price": 2.10}'
-
-curl -X POST http://localhost:8001/api/recommendations/<id>/resolve \
-  -H 'Content-Type: application/json' \
-  -d '{"outcome":"WIN", "realized_pnl":436, "directional_correct":true, "target_before_invalidation":true, "profitable_option":true}'
-```
-
-The full-trade win rate uses resolved triggered recommendations only. Created-but-never-
-triggered, invalidated-before-entry, active, and unresolved recommendations are not counted
-as wins or losses.
-
-## Real E*TRADE Versus Paper Trading
-
-These are separate systems. `REAL E*TRADE` reads broker accounts and positions from the
-E*TRADE integration and is read-only analysis. It does not run paper risk controls or show
-simulated fills. `PAPER CHALLENGE` uses its own `$100,000` portfolio, orders, fills,
-positions, recommendation ledger, and performance snapshots.
-
-Separate API families enforce the boundary:
-
-```text
-/api/etrade/accounts
-/api/etrade/positions
-/api/etrade/orders
-/api/etrade/trades
-
-/api/paper/portfolio
-/api/paper/positions
-/api/paper/orders
-/api/paper/recommendations
-/api/paper/performance
-```
-
-Paper order IDs are generated with a `paper-` prefix and brokerage identifiers are rejected.
-Legacy generic recommendation rows are copied into the paper ledger. Legacy risk rows whose
-provenance is ambiguous are retained and listed at `/api/admin/paper/migration-review` for
-admin review rather than being silently assigned to either system.
-
-## Troubleshooting
-
-### E*TRADE says not connected
-
-- Confirm `.env` contains valid consumer key and secret.
-- Confirm the callback URL matches your E*TRADE app exactly.
-- Visit `/api/auth/etrade/status`.
-- Reconnect from the `Settings` tab.
-
-### No option candidates
-
-Likely causes:
-
-- all contracts failed volume/OI/spread filters;
-- provider returned missing bid/ask;
-- E*TRADE auth expired;
-- the symbol has poor options liquidity;
-- selected expirations are too near or unavailable.
-
-Check the `warnings`, `filtered_counts`, and `filtered_out_count` fields from `/api/options/{symbol}/contracts`.
-
-### Yahoo candle issues
-
-- Yahoo/yfinance can rate-limit or return delayed/incomplete data.
-- Use `/api/providers/status` for rate-limit/backoff state.
-- Use `/api/history/backfill/status` and `/api/db/status` to confirm SQLite history is being reused.
-- Use the candle cache worker status endpoint for live cache warming: `/api/cache/candles/status`.
-- Consider Twelve Data for candles if Yahoo is unreliable.
-
-## Active Signals
-
-`ACTIVE SIGNALS` is the live signal surface for currently actionable options setups. It
-publishes only deterministic setups that have an exact entry condition, invalidation, targets,
-reward-to-risk, current data, and an acceptable contract. Signals are time-bounded around the
-next 15 minutes by default and are revalidated by the server worker every three minutes during
-the actionable options session.
-
-Signals that expire, invalidate, reach a target, become stale, lose VWAP or volume confirmation,
-or fail contract-quality gates are removed from the active view and retained in Signal History.
-AI is a final validation layer when enabled; it cannot create a setup or override deterministic
-hard gates. Paper opening trades require a matching `TRIGGERED` or `ACTIVE` signal and its maximum
-premium limit. Closed-session data is planning data and does not create new executable intraday
-signals.
-
-API routes:
-
-```text
-/api/signals/active
-/api/signals/refresh
-/api/signals/{signal_id}/trigger
-/api/signals/history
-/api/signals/status
-```
-
-## Roadmap
-
-High-value next improvements:
-
-- Add IV rank / IV percentile and skew-aware scoring.
-- Add event filters for earnings, dividends, FOMC/CPI, and major market events.
-- Backtest option premium behavior, not only underlying direction.
-- Add strategy-specific scoring for scalps, day trades, swings, debit spreads, and hedges.
-- Add configurable risk sizing and max premium-at-risk displays.
-- Add tests around provider normalization and option filtering.
-
-## Risk
-
-Trading options involves substantial risk and can result in total loss of premium or more
-depending on strategy. Active Signals are time-bounded system outputs, not guarantees of
-execution or outcome. Brokerage positions remain read-only unless a separate execution feature
-is explicitly enabled; paper trades remain isolated from E*TRADE data.
+> **There is nothing good at the moment. I am still working.**
