@@ -358,6 +358,22 @@ class BrokeragePosition(Base):
     payload_json = Column(Text, nullable=True)
 
 
+class BrokerageExitAuditEvent(Base):
+    __tablename__ = "brokerage_exit_audit_events"
+    __table_args__ = (
+        Index("ix_brokerage_exit_audit_events_position_created_at", "brokerage_position_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    brokerage_position_id = Column(Integer, ForeignKey("brokerage_positions.id"), nullable=False, index=True)
+    broker = Column(String(32), nullable=False, default="etrade")
+    symbol = Column(String(32), nullable=True, index=True)
+    event_type = Column(String(64), nullable=False)
+    reason = Column(Text, nullable=False)
+    details_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class BrokerageOrder(Base):
     __tablename__ = "brokerage_orders"
     __table_args__ = (

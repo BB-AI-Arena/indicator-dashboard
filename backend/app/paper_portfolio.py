@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
 
 from .config import config_manager
+from .exit_management import build_exit_plan, is_complete_exit_plan
 from .models import (
     PaperFill,
     PaperMigrationReview,
@@ -143,6 +144,7 @@ def _position_payload(row: PaperPosition) -> dict[str, Any]:
         "strategy_version": row.strategy_version,
         "simulated_fill_source": row.simulated_fill_source,
         "quote_timestamp": row.updated_at,
+        "exit_plan": payload.get("exit_plan"),
     }
 
 
@@ -172,6 +174,15 @@ def get_paper_portfolio(db: Session, market_session: dict[str, Any] | None = Non
     positions = db.query(PaperPosition).filter(PaperPosition.paper_portfolio_id == portfolio.id).filter(PaperPosition.status == "OPEN").all()
     payload_positions = [_position_payload(row) for row in positions]
     paper_risk = evaluate_paper_portfolio(payload_positions, market_session=market_session)
+    risk_by_id = {row.get("position_id"): row for row in paper_risk.get("positions") or []}
+    payload_positions = [
+        {
+            **position,
+            "exit_plan": (risk_by_id.get(position.get("position_id")) or {}).get("exit_plan") or position.get("exit_plan"),
+            "exit_management": (risk_by_id.get(position.get("position_id")) or {}).get("exit_management"),
+        }
+        for position in payload_positions
+    ]
     performance = get_recommendation_performance(db)
     market_value = sum(_safe_float(row.market_value) or 0.0 for row in positions)
     equity = float(portfolio.cash or 0.0) + market_value
@@ -237,6 +248,16 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
     side = str(payload.get("side") or "BUY_TO_OPEN").upper()
     if side not in {"BUY_TO_OPEN", "SELL_TO_OPEN", "SELL_TO_CLOSE", "BUY_TO_CLOSE"}:
         raise ValueError("unsupported paper order side")
+    exit_plan = payload.get("exit_plan")
+    if side in {"BUY_TO_OPEN", "SELL_TO_OPEN"}:
+        plan_input = {
+            **payload,
+            "direction": "SHORT" if side == "SELL_TO_OPEN" else "LONG",
+            "entry_option_price": fill_price,
+        }
+        exit_plan = exit_plan or build_exit_plan(plan_input)
+        if not is_complete_exit_plan(exit_plan):
+            raise ValueError("opening paper trades require a complete exit_plan with entry, invalidation, target 1, and target 2")
     notional = quantity * fill_price * 100.0
     if side in {"BUY_TO_OPEN", "BUY_TO_CLOSE"} and portfolio.cash < notional:
         raise ValueError("insufficient paper cash")
@@ -303,9 +324,12 @@ def create_paper_order(db: Session, payload: dict[str, Any], username: str) -> d
                 strategy_version=order.strategy_version,
                 opened_at=now,
                 updated_at=now,
+                payload_json=json.dumps({**payload, "exit_plan": exit_plan}, sort_keys=True, default=str),
             )
             db.add(position)
     elif position:
+        if exit_plan and not position.payload_json:
+            position.payload_json = json.dumps({"exit_plan": exit_plan}, sort_keys=True)
         position.quantity = max(0.0, position.quantity - quantity)
         position.current_price = fill_price
         position.market_value = position.quantity * fill_price * 100.0

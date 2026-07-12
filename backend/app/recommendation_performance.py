@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from .config import config_manager
+from .exit_management import build_exit_plan, is_complete_exit_plan
 from .history import now_iso
 from .models import (
     PaperPortfolio,
@@ -254,6 +255,21 @@ def trigger_recommendation(db: Session, recommendation_id: str, payload: dict[st
         raise ValueError("Recommendation not found")
     if record.status == "RESOLVED":
         raise ValueError("Resolved recommendations cannot be triggered again")
+    try:
+        snapshot = json.loads(record.snapshot_json or "{}")
+    except Exception:
+        snapshot = {}
+    stored_plan = snapshot.get("exit_plan") or (snapshot.get("candidate") or {}).get("exit_plan")
+    if not is_complete_exit_plan(stored_plan):
+        candidate = snapshot.get("candidate") or {
+            "direction": record.direction,
+            "entry_trigger": {"price": record.entry_price},
+            "invalidation": {"price": record.invalidation_price},
+            "targets": [{"price": record.target_1_price}, {"price": record.target_2_price}],
+        }
+        stored_plan = build_exit_plan(candidate=candidate)
+    if not is_complete_exit_plan(stored_plan):
+        raise ValueError("Recommendation cannot trigger without a complete pre-entry exit plan")
     if record.status != "TRIGGERED":
         record.status = "TRIGGERED"
         record.triggered_at = _timestamp((payload or {}).get("triggered_at")) or now_iso()
@@ -450,8 +466,13 @@ def get_recommendation_performance(db: Session, now: datetime | None = None) -> 
 
 def list_recommendations(db: Session, limit: int = 100) -> list[dict[str, Any]]:
     rows = db.query(PaperRecommendation).order_by(PaperRecommendation.created_at.desc()).limit(max(1, min(limit, 500))).all()
-    return [
-        {
+    output = []
+    for row in rows:
+        try:
+            snapshot = json.loads(row.snapshot_json or "{}")
+        except Exception:
+            snapshot = {}
+        output.append({
             "recommendation_id": row.recommendation_id,
             "symbol": row.symbol,
             "direction": row.direction,
@@ -466,6 +487,6 @@ def list_recommendations(db: Session, limit: int = 100) -> list[dict[str, Any]]:
             "realized_pnl": row.realized_pnl,
             "option_return_pct": row.option_return_pct,
             "snapshot_version": row.snapshot_version,
-        }
-        for row in rows
-    ]
+            "exit_plan": snapshot.get("exit_plan") or (snapshot.get("candidate") or {}).get("exit_plan"),
+        })
+    return output

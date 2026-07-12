@@ -358,7 +358,10 @@ paper_portfolio:
   exceptional_ticker_exposure_pct: 50
   profit_trail_activation_pct: 15
   profit_trail_pct: 5
-  trailing_mode: STRICT_5_PERCENT
+  trailing_mode: HYBRID
+  management_timeframe: 5m
+  max_profit_giveback_pct: 5
+  partial_target_1_fraction: 0.33
   stop_execution_mode: CONSERVATIVE_STOP_MARKET
   simulated_slippage_pct: 1
   gap_risk_pct: 5

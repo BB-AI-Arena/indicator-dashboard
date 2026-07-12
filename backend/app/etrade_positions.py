@@ -18,6 +18,7 @@ from .cache_policy import market_aware_ttl
 from .config import config_manager
 from .data_provider import fetch_candles
 from .db import SessionLocal
+from .exit_management import build_exit_plan, evaluate_exit_management
 from .indicators import apply_indicators
 from .money_flow import build_money_flow
 from .history import get_candles_from_sql
@@ -27,7 +28,7 @@ from .providers.base import ProviderError
 from .providers import provider_factory
 from .providers.option_filters import central_today, parse_expiration_date, spread_pct
 from .providers.rate_limiter import call_with_rate_limit
-from .models import BrokerageAccount, BrokeragePosition
+from .models import BrokerageAccount, BrokerageExitAuditEvent, BrokeragePosition
 
 
 BAD_QUOTE_TYPES = {"CLOSING", "DELAYED", "SANDBOX"}
@@ -890,7 +891,10 @@ def _advice_prompt(positions: list[dict[str, Any]]) -> dict[str, Any]:
             "Give plain-English management advice for open option positions. "
             "Assume the user already understands options. Focus on what to do next: hold, trim, close, roll, reduce, or watch. "
             "Use only the supplied facts. Do not invent catalysts, news, or price predictions. "
-            "Prefer risk management over hype. Keep each position response concise and specific."
+            "Prefer risk management over hype. Evaluate current R, peak R, target progress, VWAP, "
+            "completed management-timeframe structure, volume, profit giveback, and overnight risk. "
+            "Return concise HOLD, TRIM, CLOSE, REDUCE, ROLL, or WATCH guidance. "
+            "Never imply that a suggested stop was placed with E*TRADE."
         ),
         "positions": [
             {
@@ -923,6 +927,8 @@ def _advice_prompt(positions: list[dict[str, Any]]) -> dict[str, Any]:
                 "moneyness": pos.get("moneyness"),
                 "distance_from_spot_pct": pos.get("distance_from_spot_pct"),
                 "warnings": pos.get("warnings"),
+                "exit_plan": pos.get("exit_plan"),
+                "exit_management": pos.get("exit_management"),
             }
             for pos in positions
         ],
@@ -1376,6 +1382,22 @@ def _persist_brokerage_positions(accounts: list[dict[str, Any]]) -> None:
                         broker_record_id=broker_record_id,
                     )
                     db.add(stored)
+                    db.flush()
+                try:
+                    previous_payload = json.loads(stored.payload_json or "{}")
+                except Exception:
+                    previous_payload = {}
+                previous_management = previous_payload.get("exit_management") or {}
+                current_management = position.get("exit_management") or {}
+                if current_management and previous_management.get("state") != current_management.get("state"):
+                    db.add(BrokerageExitAuditEvent(
+                        brokerage_position_id=stored.id,
+                        broker="etrade",
+                        symbol=position.get("symbol"),
+                        event_type="EXIT_STATE_CHANGED",
+                        reason=str(current_management.get("reason") or current_management.get("state") or "Position management state updated."),
+                        details_json=json.dumps(current_management, sort_keys=True, default=str),
+                    ))
                 stored.symbol = position.get("symbol")
                 stored.contract_symbol = position.get("display_symbol")
                 stored.quantity = position.get("signed_quantity")
@@ -1574,6 +1596,16 @@ def _build_positions_snapshot(market_session: dict[str, Any] | None = None) -> d
                 quote_timestamp=position.get("quote_timestamp"),
                 quote_type=position.get("quote_type"),
             )
+            management_context = dict((historical_chart or {}).get("latest") or {})
+            management_context.setdefault("completed_candle", True)
+            exit_plan = build_exit_plan(position, indicators=management_context)
+            exit_management = evaluate_exit_management(
+                position,
+                exit_plan,
+                indicators=management_context,
+                market_session=market_session,
+                config=config_manager.get("paper_portfolio", default={}) or {},
+            )
             enriched_positions.append(
                 {
                     **position,
@@ -1582,6 +1614,14 @@ def _build_positions_snapshot(market_session: dict[str, Any] | None = None) -> d
                     "historical_context": historical_context,
                     "historical_chart": historical_chart,
                     "news_catalyst": news_catalyst,
+                    "management_context": management_context,
+                    "exit_plan": exit_plan,
+                    "exit_management": {
+                        **exit_management,
+                        "broker_order_confirmed": False,
+                        "actual_working_stop": None,
+                        "note": "Suggested management only. No E*TRADE stop order is implied or placed.",
+                    },
                 }
             )
         account["positions"] = enriched_positions

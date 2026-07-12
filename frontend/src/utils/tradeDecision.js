@@ -775,6 +775,16 @@ export function evaluateTradeSetup({ side, scan, indicatorData, contract, contra
   const historicalEdge = historicalSupport.historicalEdge
   const liveSession = isLiveSession(marketSession)
 
+  const plannedTrigger = calculateEntryTrigger(normalizedSide, indicatorData, scan, liveUnderlyingPrice)
+  const plannedInvalidation = calculateInvalidation(normalizedSide, indicatorData, scan, liveUnderlyingPrice)
+  const plannedTargets = calculateTargets(normalizedSide, indicatorData, scan, liveUnderlyingPrice)
+  const exitPlanComplete = [
+    plannedTrigger?.price,
+    plannedInvalidation?.price,
+    plannedTargets?.[0]?.price,
+    plannedTargets?.[1]?.price,
+  ].every((value) => toNumber(value) !== null)
+
   const blockers = []
   const dataBlockers = []
   const liquidityBlockers = []
@@ -795,6 +805,10 @@ export function evaluateTradeSetup({ side, scan, indicatorData, contract, contra
     blockers.push('Chart Signal: no LONG or SHORT bias is active.')
   } else if (!chartOk) {
     blockers.push('Chart Signal: waiting for TRADE_CANDIDATE or HIGH_CONVICTION alignment.')
+  }
+
+  if (!exitPlanComplete) {
+    blockers.push('Exit Plan: entry trigger, invalidation, Target 1, and Target 2 must be defined before approval.')
   }
 
   if (!candidate) {

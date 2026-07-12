@@ -9,6 +9,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .config import config_manager
+from .exit_management import build_exit_plan, is_complete_exit_plan
 from .history import now_iso
 from .market_session import get_market_session
 from .models import (
@@ -641,6 +642,23 @@ def _candidate(db: Session, symbol: str, session: dict[str, Any]) -> dict[str, A
         feature.setup_family if feature else None,
     )
     supporting, conflicts = _evidence(groups)
+    exit_plan = build_exit_plan(
+        candidate={
+            "direction": side,
+            "setup_name": feature.setup_family if feature else None,
+            "entry_trigger": entry,
+            "invalidation": invalidation,
+            "targets": targets,
+            "preferred_option_contract": contract,
+            "setup_timeframe": "15m",
+            "execution_timeframe": "5m",
+            "management_timeframe": "5m",
+        },
+        indicators=feature_payload,
+        contract=contract if isinstance(contract, dict) else {},
+    )
+    if not is_complete_exit_plan(exit_plan):
+        gates.append("exit_plan_incomplete")
     primary_groups = ("price_structure", "vwap_control", "volume_participation")
     if any(groups.get(key, {}).get("score") != 1 for key in primary_groups):
         gates.append("primary_signal_not_aligned")
@@ -683,6 +701,7 @@ def _candidate(db: Session, symbol: str, session: dict[str, Any]) -> dict[str, A
         "entry_trigger": entry,
         "invalidation": invalidation,
         "targets": targets,
+        "exit_plan": exit_plan,
         "preferred_option_contract": contract,
         "maximum_acceptable_option_entry": contract.get("max_reasonable_entry") if isinstance(contract, dict) else None,
         "primary_reason": primary_reason,

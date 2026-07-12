@@ -6,6 +6,7 @@ import MoneyFlowPanel from './MoneyFlowPanel'
 import { buildMoneyFlow } from '../utils/moneyFlow'
 import PositionChartPanel from './PositionChartPanel'
 import NewsCatalystPanel from './NewsCatalystPanel'
+import ExitManagementPanel from './ExitManagementPanel'
 
 function money(value, digits = 2) {
   const n = Number(value)
@@ -125,6 +126,8 @@ function PositionCard({ position, marketSession, currentUser }) {
         Session: <span className="font-semibold text-slate-100">{session?.session_state || 'UNKNOWN'}</span> | Quote label: <span className="font-semibold text-slate-100">{quoteSessionLabel}</span>
         {session?.session_note ? <div className="mt-1 text-amber-200">{session.session_note}</div> : null}
       </div>
+
+      <ExitManagementPanel position={position} real />
 
       <div className="mt-3">
         <PositionChartPanel

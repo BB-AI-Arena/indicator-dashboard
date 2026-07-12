@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import RecommendationPerformance from './RecommendationPerformance'
+import ExitManagementPanel from './ExitManagementPanel'
 
 function money(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '-'
@@ -38,6 +39,7 @@ export default function PaperPortfolio() {
   const risk = data?.paper_risk || {}
   const positions = data?.positions || []
   const orders = data?.orders || []
+  const riskByPosition = Object.fromEntries((risk.positions || []).map((row) => [row.position_id, row]))
 
   if (loading && !data) return <div className="card p-4">Loading Paper Portfolio...</div>
 
@@ -108,6 +110,7 @@ export default function PaperPortfolio() {
                 <p className="mt-2">Quantity: {position.quantity} • Entry: {money(position.entry_option_price)} • Current: {money(position.current_price)}</p>
                 <p>Cost basis: {money(position.cost_basis)} • Market value: {money(position.market_value)}</p>
                 <p className="mt-1 text-xs text-slate-500">Source: {position.simulated_fill_source || 'PAPER_SIMULATION'} • Recommendation: {position.recommendation_id || '-'}</p>
+                <ExitManagementPanel position={position} riskManagement={riskByPosition[position.position_id]} />
               </div>
             ))}
           </div>

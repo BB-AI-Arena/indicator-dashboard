@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from .config import config_manager
 from .db import SessionLocal
+from .exit_management import build_exit_plan, evaluate_exit_management
 from .models import PaperPositionRiskState, PaperRiskAuditEvent
 
 
@@ -114,7 +115,14 @@ def _evaluate_position(db, position: dict[str, Any], session: dict[str, Any], cf
     if state.paper_portfolio_id is None and paper_portfolio_id is not None:
         state.paper_portfolio_id = paper_portfolio_id
 
-    trail_mode = str(cfg.get("trailing_mode", "STRICT_5_PERCENT") or "STRICT_5_PERCENT").upper()
+    try:
+        stored_state = json.loads(state.state_json or "{}")
+    except Exception:
+        stored_state = {}
+    indicators = position.get("management_context") or ((position.get("historical_chart") or {}).get("latest") if isinstance(position.get("historical_chart"), dict) else {}) or {}
+    exit_plan = position.get("exit_plan") or stored_state.get("exit_plan") or build_exit_plan(position, indicators=indicators)
+
+    trail_mode = str(cfg.get("trailing_mode", "HYBRID") or "HYBRID").upper()
     activation_return = float(cfg.get("profit_trail_activation_pct", 15.0) or 15.0)
     trail_pct = float(cfg.get("profit_trail_pct", 5.0) or 5.0)
     peak = _float(state.highest_executable_price)
@@ -192,7 +200,33 @@ def _evaluate_position(db, position: dict[str, Any], session: dict[str, Any], cf
     state.last_quote_timestamp = quote_timestamp
     state.last_evaluated_at = now
     state.updated_at = now
-    state.state_json = json.dumps({"mark_source": mark_source, "mode": trail_mode}, sort_keys=True)
+    exit_management = evaluate_exit_management(
+        position,
+        exit_plan,
+        indicators=indicators,
+        state=stored_state.get("exit_management") or {},
+        market_session=session,
+        config=cfg,
+    )
+    if exit_management.get("state_changed"):
+        _audit(
+            db,
+            position_id,
+            symbol,
+            "EXIT_STATE_CHANGED",
+            str(exit_management.get("reason") or exit_management.get("state")),
+            exit_management,
+            paper_portfolio_id,
+        )
+    state.state_json = json.dumps(
+        {
+            "mark_source": mark_source,
+            "mode": trail_mode,
+            "exit_plan": exit_plan,
+            "exit_management": exit_management,
+        },
+        sort_keys=True,
+    )
 
     return {
         "position_id": position_id,
@@ -217,6 +251,8 @@ def _evaluate_position(db, position: dict[str, Any], session: dict[str, Any], cf
             "spread_pct": spread_pct,
             "structural_warning": structural_warning,
         },
+        "exit_plan": exit_plan,
+        "exit_management": exit_management,
         "losing_position": losing,
         "same_day_review": before_close_review,
         "liquidation_cutoff_reached": liquidation_due,

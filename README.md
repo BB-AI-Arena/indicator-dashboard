@@ -35,6 +35,7 @@ The result is a practical research and trade-management workspace for traders wh
 - **Contract ranking**: ranks call and put candidates after filtering out expired, illiquid, missing-quote, and wide-spread contracts.
 - **AI validation gate**: optionally sends a fully factual candidate payload to OpenAI and displays a recommendation only when the model returns `PROCEED`.
 - **Session play plan**: displays scenario-based target/stop levels and historical setup context for directional symbols.
+- **Structure-aware exit management**: creates an exit plan before entry, tracks R-multiples and profit giveback, manages VWAP/structure stops, and reviews partial-profit and overnight decisions for both paper and real positions.
 - **Persistent ticker intelligence profiles**: creates a durable profile for each watchlist ticker, stores reusable candle/setup/news/options statistics, and refreshes incrementally from SQLite instead of rebuilding on page load.
 - **Decision dashboard**: the main dashboard renders only top long/short candidates, forming setups, next-session bias, and no-trade conditions from stored profiles and cached analysis.
 - **Watchlist Intelligence**: detailed watchlist coverage, profile state, historical tables, provider diagnostics, and ticker drill-ins live outside the main decision page.
