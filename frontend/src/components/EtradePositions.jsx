@@ -7,6 +7,7 @@ import { buildMoneyFlow } from '../utils/moneyFlow'
 import PositionChartPanel from './PositionChartPanel'
 import NewsCatalystPanel from './NewsCatalystPanel'
 import ExitManagementPanel from './ExitManagementPanel'
+import OptionEstimatePanel from './OptionEstimatePanel'
 
 function money(value, digits = 2) {
   const n = Number(value)
@@ -44,7 +45,7 @@ function riskTone(source) {
   return 'border-amber-700/60 bg-amber-900/30 text-amber-200'
 }
 
-function PositionCard({ position, marketSession, currentUser }) {
+function PositionCard({ position, marketSession, currentUser, estimate }) {
   const advice = position.advice || {}
   const session = marketSession || position.market_session || null
   const quote = position.underlying_quote || {
@@ -128,6 +129,8 @@ function PositionCard({ position, marketSession, currentUser }) {
       </div>
 
       <ExitManagementPanel position={position} real />
+
+      <OptionEstimatePanel estimate={estimate} quantity={position.quantity} averageCost={position.cost_basis} real />
 
       <div className="mt-3">
         <PositionChartPanel
@@ -336,6 +339,7 @@ export default function EtradePositions({ currentUser, marketSession }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [estimateData, setEstimateData] = useState(null)
   const hasLoadedOnce = useRef(false)
 
   const load = async (refresh = false) => {
@@ -343,8 +347,13 @@ export default function EtradePositions({ currentUser, marketSession }) {
     if (refresh) setRefreshing(true)
     setError('')
     try {
-      const res = await api.etradeOptionPositions(refresh)
-      setData(res)
+      const [positionsResult, estimatesResult] = await Promise.allSettled([
+        api.etradeOptionPositions(refresh),
+        api.optionEstimates('', 200),
+      ])
+      if (positionsResult.status === 'rejected') throw positionsResult.reason
+      setData(positionsResult.value)
+      if (estimatesResult.status === 'fulfilled') setEstimateData(estimatesResult.value)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -362,6 +371,7 @@ export default function EtradePositions({ currentUser, marketSession }) {
   }, [currentUser?.username])
 
   const summary = data?.summary || {}
+  const estimatesBySymbol = Object.fromEntries((estimateData?.estimates || []).map((row) => [String(row.option_symbol || '').toUpperCase(), row]))
   const portfolioSummary = summary?.portfolio_summary || data?.ai?.summary || {}
   const aiBlockingReason = summary?.ai_blocking_reason || data?.ai?.blocking_reason || ''
   const session = marketSession || data?.market_session || null
@@ -511,8 +521,8 @@ export default function EtradePositions({ currentUser, marketSession }) {
                 </div>
               </div>
               <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-2 items-start">
-                  {(account.positions || []).map((position) => (
-                    <PositionCard key={position.position_id} position={position} marketSession={session} currentUser={currentUser} />
+                    {(account.positions || []).map((position) => (
+                    <PositionCard key={position.position_id} position={position} marketSession={session} currentUser={currentUser} estimate={estimatesBySymbol[String(position.display_symbol || position.contract_symbol || '').toUpperCase()]} />
                   ))}
                 </div>
               </section>

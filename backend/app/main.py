@@ -45,6 +45,7 @@ from .indicators import apply_indicators
 from .models import Alert, BackfillChunk, BackfillRun, BrokerageFill, BrokerageOrder, BrokerageTransaction, PaperMigrationReview, PaperMorningCandidate, Scan, TickerProfile, TradeReviewAccount, TradeReviewSyncRun, TradeReviewTrade, Watchlist
 from .news_feeds import market_news_feed
 from .options import calculate_ratios, get_option_expirations, ranked_contracts
+from .option_estimation import latest_estimates, start_if_enabled as start_option_estimation_worker, status as option_estimation_status, stop as stop_option_estimation_worker
 from .providers import provider_factory
 from .providers.base import ProviderError
 from .providers.rate_limiter import detect_rate_limit_error, provider_cooldown, provider_status
@@ -578,6 +579,7 @@ async def startup_event():
     if etrade_auth.is_connected():
         with contextlib.suppress(Exception):
             get_open_option_positions(refresh=True, market_session=get_market_session())
+    start_option_estimation_worker()
     return
 
 
@@ -626,6 +628,7 @@ async def _refresh_missing_earnings_profiles() -> None:
 @app.on_event("shutdown")
 async def shutdown_event():
     await stop_candle_worker()
+    await stop_option_estimation_worker()
     return
 
 
@@ -657,6 +660,18 @@ def providers_status():
 @app.get("/api/market/session")
 def market_session_status():
     return get_market_session()
+
+
+@app.get("/api/options/estimates")
+def option_estimates(request: Request, symbol: str | None = None, limit: int = 100, db: Session = Depends(get_db)):
+    _request_admin(request)
+    return latest_estimates(db, symbol=symbol, limit=limit)
+
+
+@app.get("/api/options/estimates/status")
+def option_estimates_status(request: Request):
+    _request_admin(request)
+    return option_estimation_status()
 
 
 @app.get("/api/db/status")

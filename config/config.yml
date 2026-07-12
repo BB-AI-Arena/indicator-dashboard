@@ -387,6 +387,17 @@ paper_portfolio:
   mandatory_loser_review_et: "15:30"
   mandatory_loser_cutoff_et: "15:50"
 
+option_estimation:
+  enabled: true
+  refresh_day_start_et: "07:00"
+  refresh_day_end_et: "17:30"
+  daytime_interval_seconds: 180
+  off_hours_interval_seconds: 1800
+  iv_shock_points: 5
+  risk_free_rate: 0.04
+  dividend_yield: 0
+  verify_core_symbols_with_etrade: true
+
 morning_routine:
   enabled: true
   premarket_start_et: "04:00"

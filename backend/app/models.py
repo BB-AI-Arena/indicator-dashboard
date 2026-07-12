@@ -222,6 +222,58 @@ class OptionPositioningSnapshot(Base):
     created_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
 
+class OptionEstimateSnapshot(Base):
+    """Actual option quote baseline plus non-executable valuation estimates."""
+
+    __tablename__ = "option_estimate_snapshots"
+    __table_args__ = (
+        Index("ix_option_estimate_snapshots_symbol_option_created_at", "symbol", "option_symbol", "created_at"),
+        Index("ix_option_estimate_snapshots_source_created_at", "source_type", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(16), nullable=False, index=True)
+    option_symbol = Column(String(160), nullable=False, index=True)
+    source_type = Column(String(32), nullable=False, index=True)
+    provider = Column(String(32), nullable=True)
+    session_state = Column(String(32), nullable=True, index=True)
+    quote_state = Column(String(40), nullable=False)
+    baseline_type = Column(String(40), nullable=True)
+    baseline_price = Column(Float, nullable=True)
+    baseline_timestamp = Column(String(64), nullable=True)
+    baseline_underlying_price = Column(Float, nullable=True)
+    underlying_price = Column(Float, nullable=True)
+    underlying_timestamp = Column(String(64), nullable=True)
+    expiration = Column(String(16), nullable=True)
+    strike = Column(Float, nullable=True)
+    option_type = Column(String(8), nullable=True)
+    implied_volatility = Column(Float, nullable=True)
+    delta = Column(Float, nullable=True)
+    gamma = Column(Float, nullable=True)
+    theta = Column(Float, nullable=True)
+    vega = Column(Float, nullable=True)
+    rho = Column(Float, nullable=True)
+    greek_source = Column(String(32), nullable=True)
+    estimated_current_value = Column(Float, nullable=True)
+    estimated_next_open_value = Column(Float, nullable=True)
+    iv_down_value = Column(Float, nullable=True)
+    iv_up_value = Column(Float, nullable=True)
+    pricing_model = Column(String(64), nullable=True)
+    input_quality = Column(String(32), nullable=True)
+    dedupe_key = Column(String(128), nullable=True, index=True)
+    payload_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class OptionEstimationJobLock(Base):
+    __tablename__ = "option_estimation_job_locks"
+
+    lock_name = Column(String(64), primary_key=True)
+    owner = Column(String(128), nullable=True)
+    locked_until = Column(String(64), nullable=True)
+    updated_at = Column(String(64), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class SocialMention(Base):
     __tablename__ = "social_mentions"
     __table_args__ = (

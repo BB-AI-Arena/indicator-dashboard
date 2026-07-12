@@ -208,6 +208,13 @@ export const api = {
   etradeAccounts: (refresh = false) => request(`/api/etrade/accounts${refresh ? '?refresh=true' : ''}`, { timeoutMs: 60000 }),
   etradeOrders: () => request('/api/etrade/orders', { timeoutMs: 15000 }),
   etradeTrades: () => request('/api/etrade/trades', { timeoutMs: 15000 }),
+  optionEstimates: (symbol = '', limit = 100) => {
+    const query = new URLSearchParams()
+    if (symbol) query.set('symbol', symbol)
+    query.set('limit', String(limit))
+    return request(`/api/options/estimates?${query.toString()}`, { timeoutMs: 15000 })
+  },
+  optionEstimateStatus: () => request('/api/options/estimates/status', { timeoutMs: 10000 }),
   paperPortfolio: () => request('/api/paper/portfolio', { timeoutMs: 20000 }),
   paperMorningBrief: () => request('/api/paper/morning-brief', { timeoutMs: 30000 }),
   paperMorningRefresh: () => request('/api/paper/morning-brief/refresh', { method: 'POST', timeoutMs: 30000 }),

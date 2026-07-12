@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import RecommendationPerformance from './RecommendationPerformance'
 import ExitManagementPanel from './ExitManagementPanel'
+import OptionEstimatePanel from './OptionEstimatePanel'
 
 function money(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '-'
@@ -15,13 +16,20 @@ function pct(value) {
 
 export default function PaperPortfolio() {
   const [data, setData] = useState(null)
+  const [estimateData, setEstimateData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   const load = async () => {
     try {
       setError('')
-      setData(await api.paperPortfolio())
+      const [portfolioResult, estimatesResult] = await Promise.allSettled([
+        api.paperPortfolio(),
+        api.optionEstimates('', 200),
+      ])
+      if (portfolioResult.status === 'rejected') throw portfolioResult.reason
+      setData(portfolioResult.value)
+      if (estimatesResult.status === 'fulfilled') setEstimateData(estimatesResult.value)
     } catch (err) {
       setError(err.message || 'Paper Portfolio unavailable')
     } finally {
@@ -40,6 +48,7 @@ export default function PaperPortfolio() {
   const positions = data?.positions || []
   const orders = data?.orders || []
   const riskByPosition = Object.fromEntries((risk.positions || []).map((row) => [row.position_id, row]))
+  const estimatesBySymbol = Object.fromEntries((estimateData?.estimates || []).map((row) => [String(row.option_symbol || '').toUpperCase(), row]))
 
   if (loading && !data) return <div className="card p-4">Loading Paper Portfolio...</div>
 
@@ -111,6 +120,7 @@ export default function PaperPortfolio() {
                 {position.fill_quality && <p className="mt-1 text-xs text-amber-200">Fill assumption: {position.fill_quality.replaceAll('_', ' ')} ({position.adverse_fill_penalty_pct ?? 5}% adverse) · intended {money(position.intended_fill_price)} → executed {money(position.executed_fill_price)}</p>}
                 <p>Cost basis: {money(position.cost_basis)} • Market value: {money(position.market_value)}</p>
                 <p className="mt-1 text-xs text-slate-500">Source: {position.simulated_fill_source || 'PAPER_SIMULATION'} • Recommendation: {position.recommendation_id || '-'}</p>
+                <OptionEstimatePanel estimate={estimatesBySymbol[String(position.contract_symbol || '').toUpperCase()]} quantity={position.quantity} averageCost={position.cost_basis} />
                 <ExitManagementPanel position={position} riskManagement={riskByPosition[position.position_id]} />
               </div>
             ))}

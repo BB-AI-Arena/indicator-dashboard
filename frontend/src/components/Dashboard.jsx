@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { formatCentralTime } from '../utils/time'
 import RecommendationPerformance from './RecommendationPerformance'
+import OptionEstimatePanel from './OptionEstimatePanel'
 
 function money(value, digits = 2) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '-'
@@ -61,7 +62,7 @@ function ContractSummary({ contract }) {
   )
 }
 
-function SetupCard({ title, candidate, emptyText, onSelectSymbol }) {
+function SetupCard({ title, candidate, emptyText, onSelectSymbol, estimate }) {
   if (!candidate) {
     return (
       <section className="decision-card decision-card-empty">
@@ -119,6 +120,7 @@ function SetupCard({ title, candidate, emptyText, onSelectSymbol }) {
         <strong><ContractSummary contract={candidate.preferred_option_contract} /></strong>
         <small>Max entry: {candidate.maximum_acceptable_option_entry ? money(candidate.maximum_acceptable_option_entry) : 'requires live spread validation'}</small>
       </div>
+      <OptionEstimatePanel estimate={estimate} />
 
       <div className="decision-compact-meta">
         <span>Historical: {confidenceText(match)}</span>
@@ -172,12 +174,18 @@ export default function Dashboard({ onSelectSymbol }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [estimateData, setEstimateData] = useState(null)
 
   const load = async () => {
     setError('')
     try {
-      const payload = await api.decisionDashboard()
-      setData(payload)
+      const [dashboardResult, estimatesResult] = await Promise.allSettled([
+        api.decisionDashboard(),
+        api.optionEstimates('', 200),
+      ])
+      if (dashboardResult.status === 'rejected') throw dashboardResult.reason
+      setData(dashboardResult.value)
+      if (estimatesResult.status === 'fulfilled') setEstimateData(estimatesResult.value)
     } catch (e) {
       setError(e.message || 'Decision dashboard unavailable')
     } finally {
@@ -203,6 +211,11 @@ export default function Dashboard({ onSelectSymbol }) {
   const nextBest = useMemo(() => data?.next_best_setups || [], [data])
   const noTrade = data?.no_trade_conditions || []
   const market = data?.market_state || {}
+  const estimates = useMemo(() => Object.fromEntries((estimateData?.estimates || []).map((row) => [String(row.option_symbol || '').toUpperCase(), row])), [estimateData])
+  const estimateFor = (candidate) => {
+    const contract = candidate?.preferred_option_contract || {}
+    return estimates[String(contract.contract || contract.contract_symbol || contract.symbol || '').toUpperCase()]
+  }
 
   return (
     <div className="decision-page">
@@ -235,12 +248,14 @@ export default function Dashboard({ onSelectSymbol }) {
           candidate={data?.best_long_setup}
           emptyText="No qualified long setup."
           onSelectSymbol={onSelectSymbol}
+          estimate={estimateFor(data?.best_long_setup)}
         />
         <SetupCard
           title="Best Short Setup"
           candidate={data?.best_short_setup}
           emptyText="No qualified short setup."
           onSelectSymbol={onSelectSymbol}
+          estimate={estimateFor(data?.best_short_setup)}
         />
       </div>
 
